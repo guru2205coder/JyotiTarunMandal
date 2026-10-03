@@ -29,6 +29,7 @@ import {
   Copy,
   ShieldCheck,
   RefreshCw,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 export const DonorsAndWorkersView = () => {
@@ -239,6 +240,50 @@ export const DonorsAndWorkersView = () => {
     } catch (err) {
       showToast(err.message || 'Error deleting donor', 'error');
     }
+  };
+
+  const handleExportDonorsCSV = () => {
+    if (!donors || donors.length === 0) {
+      showToast('कोणताही डेटा उपलब्ध नाही', 'error');
+      return;
+    }
+
+    const headers = [
+      'Sr No',
+      'Donor Name',
+      'Mobile',
+      'Book No',
+      'Receipt No',
+      'Promised Amount',
+      'Total Paid',
+      'Remaining',
+      'Status',
+      'Installment Count',
+    ];
+    const rows = donors.map((d, index) => [
+      index + 1,
+      `"${(d.name || '').replace(/"/g, '""')}"`,
+      `"${(d.mobile || '').replace(/"/g, '""')}"`,
+      `"${(d.bookNo || (selectedBookFilter !== 'all' ? selectedBookFilter : '')).replace(/"/g, '""')}"`,
+      `"${(d.physicalReceiptNo || '').replace(/"/g, '""')}"`,
+      d.promisedAmount || 0,
+      d.totalPaid || 0,
+      d.remaining !== undefined ? d.remaining : Math.max(0, (d.promisedAmount || 0) - (d.totalPaid || 0)),
+      `"${(d.status || '').replace(/"/g, '""')}"`,
+      d.installmentCount || (d.payments?.length || 0),
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const fileLabel = selectedBookFilter !== 'all' ? selectedBookFilter.replace(/[^a-zA-Z0-9_-]/g, '_') : 'All_Books';
+    link.setAttribute('download', `Vargani_Donors_${fileLabel}_${activeFestival?.year || 2026}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`देणगीदार तपशील (${selectedBookFilter !== 'all' ? selectedBookFilter : 'सर्व वह्या'}) Excel डाऊनलोड झाली!`);
   };
 
   const handleQuickPayFull = async (donor) => {
@@ -563,6 +608,50 @@ export const DonorsAndWorkersView = () => {
                 className="absolute right-3.5 top-3 text-zinc-400 hover:text-white"
               >
                 ✕
+              </button>
+            )}
+          </div>
+
+          {/* Book Filter Bar & Quick Excel Export */}
+          <div className="flex items-center justify-between gap-2 pt-0.5">
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+              <button
+                onClick={() => setSelectedBookFilter('all')}
+                className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition flex items-center gap-1 ${
+                  selectedBookFilter === 'all'
+                    ? 'bg-[#FF5A1F] text-white shadow-sm'
+                    : 'bg-[#181a1f] border border-[#272b36] text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Layers size={11} />
+                <span>सर्व वह्या (All)</span>
+              </button>
+              {bookStats?.books?.map((b) => (
+                <button
+                  key={b.bookNo}
+                  onClick={() => setSelectedBookFilter(b.bookNo)}
+                  className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition flex items-center gap-1 ${
+                    selectedBookFilter === b.bookNo
+                      ? 'bg-[#0f2d29] border border-[#2DD4BF] text-[#2DD4BF] shadow-sm font-extrabold'
+                      : 'bg-[#181a1f] border border-[#272b36] text-zinc-300 hover:text-white'
+                  }`}
+                >
+                  <BookOpen size={11} className={selectedBookFilter === b.bookNo ? 'text-[#2DD4BF]' : 'text-zinc-500'} />
+                  <span>{b.label}</span>
+                  <span className="text-[10px] opacity-75 font-mono">({b.donorCount})</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Quick Excel Export */}
+            {(user?.role === 'Admin' || user?.role === 'Treasurer') && (
+              <button
+                onClick={handleExportDonorsCSV}
+                className="px-2.5 py-1 rounded-xl bg-[#1c1f26] border border-[#2b2f3a] text-[#2DD4BF] text-xs font-bold flex items-center gap-1 hover:bg-[#252833] transition whitespace-nowrap shrink-0 shadow-sm"
+                title="Excel (CSV) Download"
+              >
+                <FileSpreadsheet size={13} />
+                <span>Excel (CSV)</span>
               </button>
             )}
           </div>

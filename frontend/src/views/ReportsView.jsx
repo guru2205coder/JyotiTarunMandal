@@ -82,18 +82,23 @@ export const ReportsView = () => {
     loadReports();
   }, [activeFestival, startDate, endDate, selectedBook]);
 
-  // Export to CSV / Excel (Pure donor details without book section - Admin & Treasurer only)
+  // Export to CSV / Excel (Filtered by selected book if chosen - Admin & Treasurer only)
   const handleExportCSV = async () => {
     if (!canExportReports) {
       showToast('अहवाल डाऊनलोड करण्याचे अधिकार केवळ ॲडमिन व खजिनदारांसाठी आहेत', 'error');
       return;
     }
     try {
-      // Export all donors' complete details
       let data = donorLedger;
       if (selectedBook !== 'all') {
-        const all = await api.get(`/reports/donor-wise?festivalId=${activeFestival._id}`);
-        if (all && all.length > 0) data = all;
+        const bookData = await api.get(
+          `/reports/donor-wise?festivalId=${activeFestival._id}&bookNo=${encodeURIComponent(selectedBook)}`
+        );
+        if (bookData && Array.isArray(bookData) && bookData.length > 0) {
+          data = bookData;
+        } else if (donorLedger && Array.isArray(donorLedger)) {
+          data = donorLedger.filter((d) => (d.bookNo || '').trim() === selectedBook.trim());
+        }
       }
 
       if (!data || data.length === 0) {
@@ -105,6 +110,8 @@ export const ReportsView = () => {
         'Sr No',
         'Donor Name',
         'Mobile',
+        'Book No',
+        'Receipt No',
         'Promised Amount',
         'Total Paid',
         'Remaining',
@@ -113,25 +120,29 @@ export const ReportsView = () => {
       ];
       const rows = data.map((d, index) => [
         index + 1,
-        `"${d.name || ''}"`,
-        `"${d.mobile || ''}"`,
+        `"${(d.name || '').replace(/"/g, '""')}"`,
+        `"${(d.mobile || '').replace(/"/g, '""')}"`,
+        `"${(d.bookNo || (selectedBook !== 'all' ? selectedBook : '')).replace(/"/g, '""')}"`,
+        `"${(d.physicalReceiptNo || '').replace(/"/g, '""')}"`,
         d.promisedAmount || 0,
         d.totalPaid || 0,
         d.remaining || 0,
-        `"${d.status || ''}"`,
+        `"${(d.status || '').replace(/"/g, '""')}"`,
         d.installmentCount || 0,
       ]);
 
-      const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      // Prepend UTF-8 BOM so Excel on Windows properly displays Marathi/Devanagari Unicode
+      const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Vargani_Donors_Details_${activeFestival?.year || 2026}.csv`);
+      const fileLabel = selectedBook !== 'all' ? selectedBook.replace(/[^a-zA-Z0-9_-]/g, '_') : 'All_Books';
+      link.setAttribute('download', `Vargani_Donors_${fileLabel}_${activeFestival?.year || 2026}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      showToast('देणगीदार तपशील (CSV / Excel) फाईल डाऊनलोड झाली!');
+      showToast(`देणगीदार तपशील (${selectedBook !== 'all' ? selectedBook : 'सर्व वह्या'}) Excel डाऊनलोड झाली!`);
     } catch (err) {
       showToast('CSV डाऊनलोड करताना त्रुटी आली', 'error');
     }
