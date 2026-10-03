@@ -127,6 +127,26 @@ export const DonorsAndWorkersView = () => {
     setAddedWorkerCredentials(null);
   };
 
+  const handleShareWorkerWhatsApp = (worker, customPassword = null) => {
+    const loginUrl = window.location.origin;
+    const phone = (worker.mobile || '').replace(/\D/g, '');
+
+    let msg = `🚩 *${activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ, सोलापूर'}*\n*वर्गणी संकलन ॲप - अधिकृत लॉगिन तपशील*\n\nसस्नेह नमस्कार, *${worker.name}* जी!\nमंडळाच्या वर्गणी संकलन ॲपमध्ये आपले स्वागत आहे.\n\n📲 *आपले लॉगिन तपशील:*\n• 👤 वापरकर्ता / नाव: ${worker.name}\n• 📱 मोबाईल नंबर: ${worker.mobile || '-'}\n• 🛡️ नियुक्त भूमिका: ${worker.role || 'Volunteer'}`;
+
+    if (customPassword) {
+      msg += `\n• 🔑 पासवर्ड: *${customPassword}*`;
+    }
+
+    msg += `\n\n🌐 *लॉगिन करण्यासाठी खालील लिंकवर क्लिक करा:*\n${loginUrl}\n\n⚠️ *टीप:* लॉगिन केल्यानंतर सुरक्षिततेसाठी आपला पासवर्ड बदलून घ्यावा.\n\n🙏 मंडळास सहकार्य केल्याबद्दल धन्यवाद!`;
+
+    const encoded = encodeURIComponent(msg);
+    const url = phone
+      ? `https://api.whatsapp.com/send?phone=91${phone}&text=${encoded}`
+      : `https://api.whatsapp.com/send?text=${encoded}`;
+
+    window.open(url, '_blank');
+  };
+
   const openEditWorker = (k) => {
     setEditingWorker(k);
     setEditWorkerName(k.name || '');
@@ -434,13 +454,22 @@ export const DonorsAndWorkersView = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    <div className="text-right">
+                <div className="flex items-center gap-2">
+                    <div className="text-right mr-1">
                       <span className="text-base font-extrabold text-[#2DD4BF] block">
                         {formatINR(k.totalCollected || 0)}
                       </span>
                       <span className="text-[10px] text-zinc-500">जमा केले</span>
                     </div>
+                    {user?.role === 'Admin' && k.mobile && (
+                      <button
+                        onClick={() => handleShareWorkerWhatsApp(k)}
+                        className="p-2 rounded-xl bg-[#25D366]/15 border border-[#25D366]/30 text-[#25D366] hover:bg-[#25D366]/25 transition"
+                        title="WhatsApp वर लॉगिन लिंक व तपशील पाठवा"
+                      >
+                        <Share2 size={15} />
+                      </button>
+                    )}
                     {user?.role === 'Admin' && (
                       <button
                         onClick={() => openEditWorker(k)}
@@ -932,15 +961,14 @@ export const DonorsAndWorkersView = () => {
                     ⚠️ हा पासवर्ड कार्यकर्त्याला WhatsApp वर पाठवा. ते लॉगिन केल्यानंतर बदलू शकतात.
                   </p>
                   {addedWorkerCredentials.mobile && (
-                    <a
-                      href={`https://api.whatsapp.com/send?phone=91${addedWorkerCredentials.mobile.replace(/\D/g, '')}&text=${encodeURIComponent(`🔐 *ज्योती नवरात्र वर्गणी ॲप - लॉगिन माहिती*\n\nनमस्कार ${addedWorkerCredentials.name} जी!\n\nआपले लॉगिन तपशील:\n• मोबाईल: ${addedWorkerCredentials.mobile}\n• पासवर्ड: ${addedWorkerCredentials.password}\n• भूमिका: ${addedWorkerCredentials.role}\n\nकृपया लॉगिन केल्यावर पासवर्ड बदला. 🙏`)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center justify-center gap-2 w-full py-2 rounded-xl bg-[#25D366]/20 border border-[#25D366]/40 text-[#25D366] text-xs font-bold hover:bg-[#25D366]/30 transition"
+                    <button
+                      type="button"
+                      onClick={() => handleShareWorkerWhatsApp(addedWorkerCredentials, addedWorkerCredentials.password)}
+                      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-[#25D366]/20 border border-[#25D366]/40 text-[#25D366] text-xs font-bold hover:bg-[#25D366]/30 transition shadow-sm"
                     >
                       <Share2 size={14} />
-                      WhatsApp वर पाठवा
-                    </a>
+                      WhatsApp वर लॉगिन लिंक व माहिती पाठवा
+                    </button>
                   )}
                 </div>
                 <button
@@ -1169,6 +1197,20 @@ export const DonorsAndWorkersView = () => {
                   </>
                 )}
               </button>
+
+              {editingWorker.mobile && (
+                <button
+                  type="button"
+                  onClick={() => handleShareWorkerWhatsApp(
+                    { ...editingWorker, name: editWorkerName, role: editWorkerRole, mobile: editWorkerMobile },
+                    editWorkerPassword.trim() || null
+                  )}
+                  className="w-full py-2.5 rounded-xl bg-[#25D366]/15 border border-[#25D366]/30 text-[#25D366] text-xs font-bold hover:bg-[#25D366]/25 transition flex items-center justify-center gap-1.5"
+                >
+                  <Share2 size={14} />
+                  WhatsApp वर लॉगिन लिंक व माहिती पाठवा
+                </button>
+              )}
             </form>
           </div>
         </div>
