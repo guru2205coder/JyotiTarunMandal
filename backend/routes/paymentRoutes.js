@@ -5,7 +5,7 @@ import { Donor } from '../models/Donor.js';
 import { Festival } from '../models/Festival.js';
 import { Receipt } from '../models/Receipt.js';
 import { numberToMarathiWords, numberToEnglishWords } from '../utils/marathiNumbers.js';
-import { protect, treasurerOrAdmin } from '../middleware/auth.js';
+import { protect, adminOnly, treasurerOrAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
