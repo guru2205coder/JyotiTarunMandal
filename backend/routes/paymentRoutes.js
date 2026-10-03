@@ -293,4 +293,43 @@ router.post('/:id/reverse', protect, treasurerOrAdmin, async (req, res) => {
   }
 });
 
+// POST /api/payments/batch-update-date (Admin only - updates payment, receipt, and donor dates for a specific book)
+router.post('/batch-update-date', protect, adminOnly, async (req, res) => {
+  try {
+    const { bookNo, targetDate } = req.body;
+    if (!bookNo || !targetDate) {
+      return res.status(400).json({ message: 'bookNo and targetDate are required' });
+    }
+
+    const newDate = new Date(targetDate);
+
+    // 1. Update all Payments in this book
+    const paymentUpdate = await Payment.updateMany(
+      { bookNo: bookNo },
+      { $set: { paymentDate: newDate, createdAt: newDate } }
+    );
+
+    // 2. Update all Receipts in this book
+    const receiptUpdate = await Receipt.updateMany(
+      { bookNo: bookNo },
+      { $set: { paymentDate: newDate, createdAt: newDate } }
+    );
+
+    // 3. Update all Donors in this book
+    const donorUpdate = await Donor.updateMany(
+      { bookNo: bookNo },
+      { $set: { createdAt: newDate } }
+    );
+
+    res.json({
+      message: `Successfully updated date of ${bookNo} to ${targetDate}`,
+      paymentsUpdated: paymentUpdate.modifiedCount,
+      receiptsUpdated: receiptUpdate.modifiedCount,
+      donorsUpdated: donorUpdate.modifiedCount,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 export default router;
