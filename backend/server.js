@@ -22,24 +22,41 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Ensure DB is connected for incoming requests (essential for Vercel serverless)
+// Health Check (Always responds so deployment status & DB connectivity can be verified)
+app.get(['/api/health', '/health'], async (req, res) => {
+  let dbStatus = 'disconnected';
+  let dbError = null;
+  try {
+    await connectDB();
+    dbStatus = 'connected';
+  } catch (err) {
+    dbStatus = 'error';
+    dbError = err.message;
+  }
+
+  res.json({
+    status: 'ok',
+    message: 'Jyoti Mandal Vargani API is live',
+    database: dbStatus,
+    dbError: dbError,
+    hasMongoUri: !!process.env.MONGO_URI,
+    timestamp: new Date(),
+  });
+});
+
+// Ensure DB is connected for all API requests
 app.use(async (req, res, next) => {
   try {
     await connectDB();
     next();
   } catch (err) {
     console.error('Database connection error in request middleware:', err.message);
-    res.status(500).json({ message: 'डेटाबेस जोडणी त्रुटी: ' + err.message });
+    res.status(500).json({
+      message: 'डेटाबेस जोडणी त्रुटी (Database connection error): ' + err.message,
+      hasMongoUri: !!process.env.MONGO_URI,
+      hint: !process.env.MONGO_URI ? 'MONGO_URI is missing in Vercel Environment Variables' : 'Check MongoDB Atlas Network Access and DB user credentials'
+    });
   }
-});
-
-// Health Check
-app.get(['/api/health', '/health'], (req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'Jyoti Mandal Vargani API is running smoothly',
-    timestamp: new Date(),
-  });
 });
 
 // Helper to mount routes with or without /api prefix

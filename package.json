@@ -2,6 +2,7 @@
   "name": "jyoti-mandal-vargani-root",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "vercel-build": "npm --prefix frontend install --include=dev && npm --prefix frontend run build",
     "build": "npm --prefix frontend install --include=dev && npm --prefix frontend run build",

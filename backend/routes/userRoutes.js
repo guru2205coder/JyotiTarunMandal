@@ -18,14 +18,24 @@ const generateToken = (id) => {
 const ensureDefaultAdmin = async () => {
   const count = await User.countDocuments();
   if (count === 0) {
-    await User.create({
-      name: 'Gururaj',
-      email: 'gururajkaki2205@gmail.com',
-      mobile: '9876543210',
-      password: 'admin', // will be hashed by userSchema pre-save
-      role: 'Admin',
-      title: 'registered the mandal',
-    });
+    await User.create([
+      {
+        name: 'Gururaj (Admin)',
+        email: 'gururajkaki2205@gmail.com',
+        mobile: '9876543210',
+        password: 'admin',
+        role: 'Admin',
+        title: 'registered the mandal',
+      },
+      {
+        name: 'Gururaj Kaki',
+        email: 'gururaj@jyotimandal.com',
+        mobile: '9175344556',
+        password: 'admin',
+        role: 'Admin',
+        title: 'Mandal Admin',
+      },
+    ]);
   }
 };
 
