@@ -13,6 +13,14 @@ export const AppProvider = ({ children }) => {
 
   // Active view tab: 'home' | 'receipt' | 'workers' | 'expense' | 'reports'
   const [currentTab, setCurrentTab] = useState('home');
+  const [reportSubTab, setReportSubTab] = useState('overview'); // 'overview' | 'pending' | 'statement' | 'ledger'
+  const [selectedReportBook, setSelectedReportBook] = useState('all');
+
+  const openPendingDonors = (bookNo = 'all') => {
+    setSelectedReportBook(bookNo);
+    setReportSubTab('pending');
+    setCurrentTab('reports');
+  };
 
   // Modals state
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -181,6 +189,11 @@ export const AppProvider = ({ children }) => {
         toggleLanguage: () => setLanguage((prev) => (prev === 'mr' ? 'en' : 'mr')),
         currentTab,
         setCurrentTab,
+        reportSubTab,
+        setReportSubTab,
+        selectedReportBook,
+        setSelectedReportBook,
+        openPendingDonors,
         user,
         setUser,
         token,

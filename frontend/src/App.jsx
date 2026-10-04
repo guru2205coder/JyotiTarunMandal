@@ -88,11 +88,21 @@ export default function App() {
 
       {/* Main App Content Viewport (Mobile First Container) */}
       <main className="flex-1 w-full max-w-xl mx-auto px-3.5 sm:px-4">
-        {currentTab === 'home' && <DashboardView />}
-        {currentTab === 'receipt' && <ReceiptsView />}
-        {currentTab === 'workers' && <DonorsAndWorkersView />}
-        {currentTab === 'expense' && <ExpensesView />}
-        {currentTab === 'reports' && <ReportsView />}
+        <div className={currentTab === 'home' ? 'block' : 'hidden'}>
+          <DashboardView />
+        </div>
+        <div className={currentTab === 'receipt' ? 'block' : 'hidden'}>
+          <ReceiptsView />
+        </div>
+        <div className={currentTab === 'workers' ? 'block' : 'hidden'}>
+          <DonorsAndWorkersView />
+        </div>
+        <div className={currentTab === 'expense' ? 'block' : 'hidden'}>
+          <ExpensesView />
+        </div>
+        <div className={currentTab === 'reports' ? 'block' : 'hidden'}>
+          <ReportsView />
+        </div>
       </main>
 
       {/* Bottom Navigation */}

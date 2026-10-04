@@ -348,10 +348,10 @@ router.get('/monthly', async (req, res) => {
   }
 });
 
-// GET /api/reports/pending-vargani?festivalId=...
+// GET /api/reports/pending-vargani?festivalId=...&bookNo=...&q=...
 router.get('/pending-vargani', async (req, res) => {
   try {
-    const { festivalId } = req.query;
+    const { festivalId, bookNo, q } = req.query;
     const festival = await getFestival(festivalId);
 
     const donors = await Donor.find({ festivalId: festival._id }).lean();
@@ -366,8 +366,11 @@ router.get('/pending-vargani', async (req, res) => {
       paymentsByDonor[id] = (paymentsByDonor[id] || 0) + p.amount;
     });
 
-    const pendingList = [];
-    let totalPendingAmount = 0;
+    const bookMap = {};
+    let grandPendingAmount = 0;
+    let grandPromisedAmount = 0;
+    let grandPaidAmount = 0;
+    let grandPendingCount = 0;
 
     donors.forEach((d) => {
       const promised = d.promisedAmount || 0;
@@ -375,28 +378,95 @@ router.get('/pending-vargani', async (req, res) => {
       const remaining = Math.max(0, promised - paid);
 
       if (remaining > 0) {
-        totalPendingAmount += remaining;
-        pendingList.push({
+        grandPendingAmount += remaining;
+        grandPromisedAmount += promised;
+        grandPaidAmount += paid;
+        grandPendingCount += 1;
+
+        const rawBook = d.bookNo ? d.bookNo.trim() : '';
+        const bKey = rawBook || 'Book-1';
+
+        if (!bookMap[bKey]) {
+          bookMap[bKey] = {
+            bookNo: bKey,
+            label: bKey.startsWith('Book') ? bKey : `वही क्र. ${bKey}`,
+            pendingCount: 0,
+            totalPendingAmount: 0,
+            totalPromised: 0,
+            totalPaid: 0,
+            donors: [],
+          };
+        }
+
+        const donorItem = {
           donorId: d._id,
           name: d.name,
-          businessName: d.businessName,
-          mobile: d.mobile,
-          area: d.area,
-          bookNo: d.bookNo,
+          businessName: d.businessName || '',
+          mobile: d.mobile || '',
+          area: d.area || '',
+          bookNo: bKey,
+          physicalReceiptNo: d.physicalReceiptNo || '',
           promisedAmount: promised,
           totalPaid: paid,
           remaining,
           status: paid > 0 ? 'partially_paid' : 'pending',
-        });
+        };
+
+        bookMap[bKey].pendingCount += 1;
+        bookMap[bKey].totalPendingAmount += remaining;
+        bookMap[bKey].totalPromised += promised;
+        bookMap[bKey].totalPaid += paid;
+        bookMap[bKey].donors.push(donorItem);
       }
     });
 
-    pendingList.sort((a, b) => b.remaining - a.remaining);
+    // Sort donors in each book by remaining descending
+    Object.values(bookMap).forEach((b) => {
+      b.donors.sort((a, b) => b.remaining - a.remaining);
+    });
+
+    const allBooks = Object.values(bookMap).sort((a, b) =>
+      a.bookNo.localeCompare(b.bookNo, undefined, { numeric: true })
+    );
+
+    let filteredBooks = allBooks;
+    if (bookNo && bookNo !== 'all') {
+      filteredBooks = allBooks.filter(
+        (b) => b.bookNo.toLowerCase() === bookNo.trim().toLowerCase()
+      );
+    }
+
+    let flatDonors = [];
+    filteredBooks.forEach((b) => {
+      flatDonors.push(...b.donors);
+    });
+
+    if (q && q.trim()) {
+      const s = q.trim().toLowerCase();
+      flatDonors = flatDonors.filter(
+        (d) =>
+          (d.name && d.name.toLowerCase().includes(s)) ||
+          (d.mobile && d.mobile.includes(s)) ||
+          (d.bookNo && d.bookNo.toLowerCase().includes(s))
+      );
+    }
+
+    flatDonors.sort((a, b) => b.remaining - a.remaining);
 
     res.json({
-      totalPendingAmount,
-      count: pendingList.length,
-      donors: pendingList,
+      books: allBooks,
+      filteredBooks,
+      selectedBook: bookNo || 'all',
+      totalPendingAmount: flatDonors.reduce((sum, d) => sum + d.remaining, 0),
+      count: flatDonors.length,
+      donors: flatDonors,
+      overall: {
+        totalPendingAmount: grandPendingAmount,
+        totalPromised: grandPromisedAmount,
+        totalPaid: grandPaidAmount,
+        count: grandPendingCount,
+        totalBooks: allBooks.length,
+      },
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

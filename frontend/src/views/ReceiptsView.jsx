@@ -13,30 +13,66 @@ export const ReceiptsView = () => {
     language,
   } = useApp();
 
-  const [receipts, setReceipts] = useState([]);
+  const [allReceipts, setAllReceipts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState('All'); // 'All' | 'Today' | 'Cash' | 'UPI'
 
-  useEffect(() => {
+  const loadReceipts = (showSpinner = false) => {
     if (!activeFestival) return;
-    setLoading(true);
-
-    let query = `?festivalId=${activeFestival._id}`;
-    if (activeFilter === 'Today') query += '&todayOnly=true';
-    if (activeFilter === 'Cash' || activeFilter === 'UPI') query += `&method=${activeFilter}`;
-    if (searchTerm.trim()) query += `&q=${encodeURIComponent(searchTerm.trim())}`;
-
-    api.get(`/payments${query}`)
+    if (showSpinner) setLoading(true);
+    api.get(`/payments?festivalId=${activeFestival._id}`)
       .then((data) => {
-        setReceipts(data);
+        setAllReceipts(Array.isArray(data) ? data : []);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [activeFestival, activeFilter, searchTerm]);
+  };
+
+  useEffect(() => {
+    loadReceipts(true);
+  }, [activeFestival]);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  // Instant 0ms filtering across filter pills ('All' | 'Today' | 'Cash' | 'UPI') and search
+  const receipts = React.useMemo(() => {
+    let list = allReceipts;
+
+    if (activeFilter === 'Today') {
+      list = list.filter((rec) => {
+        const d = new Date(rec.paymentDate).toISOString().split('T')[0];
+        return d === todayStr;
+      });
+    } else if (activeFilter === 'Cash') {
+      list = list.filter((rec) => (rec.paymentMethod || '').toLowerCase() === 'cash');
+    } else if (activeFilter === 'UPI') {
+      list = list.filter((rec) => (rec.paymentMethod || '').toLowerCase() === 'upi');
+    }
+
+    if (searchTerm.trim()) {
+      const q = searchTerm.trim().toLowerCase();
+      list = list.filter((rec) => {
+        const donor = rec.donorId || rec.donor || {};
+        const donorName = (donor.name || '').toLowerCase();
+        const donorMobile = (donor.mobile || '').toLowerCase();
+        const recNo = (rec.receiptNo || '').toString().toLowerCase();
+        const recCode = (rec.receiptCode || '').toLowerCase();
+        const collectedBy = (rec.collectedBy || '').toLowerCase();
+        return (
+          donorName.includes(q) ||
+          donorMobile.includes(q) ||
+          recNo.includes(q) ||
+          recCode.includes(q) ||
+          collectedBy.includes(q)
+        );
+      });
+    }
+
+    return list;
+  }, [allReceipts, activeFilter, searchTerm, todayStr]);
 
   // Group receipts by Date (e.g. "Today", "Yesterday", or formatted date)
-  const todayStr = new Date().toISOString().split('T')[0];
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().split('T')[0];

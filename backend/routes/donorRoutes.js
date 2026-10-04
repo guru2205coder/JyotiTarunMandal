@@ -92,7 +92,11 @@ router.get('/', async (req, res) => {
     // Filter by status if specified
     let filtered = donorsWithCalculations;
     if (status && status !== 'all') {
-      filtered = donorsWithCalculations.filter((d) => d.status === status);
+      if (status === 'pending_all' || status === 'has_remaining') {
+        filtered = donorsWithCalculations.filter((d) => d.remaining > 0);
+      } else {
+        filtered = donorsWithCalculations.filter((d) => d.status === status);
+      }
     }
 
     res.json(filtered);

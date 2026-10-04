@@ -23,64 +23,99 @@ import {
   Layers,
   ArrowRight,
   ShieldCheck,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
+
 import html2canvas from 'html2canvas';
 
 export const ReportsView = () => {
-  const { activeFestival, showToast, language, openNewPayment, openReceipt, user } = useApp();
+  const {
+    activeFestival,
+    showToast,
+    language,
+    openNewPayment,
+    openReceipt,
+    user,
+    reportSubTab: ctxReportSubTab,
+    setReportSubTab: ctxSetReportSubTab,
+    selectedReportBook,
+    setSelectedReportBook,
+  } = useApp();
 
   const canExportReports = user?.role === 'Admin' || user?.role === 'Treasurer';
 
-  const [reportSubTab, setReportSubTab] = useState('overview'); // 'overview' | 'statement' | 'ledger'
-  const [selectedBook, setSelectedBook] = useState('all'); // 'all' or specific bookNo
+  const reportSubTab = ctxReportSubTab || 'overview';
+  const setReportSubTab = ctxSetReportSubTab || (() => {});
+
+  const [selectedBook, setSelectedBook] = useState(selectedReportBook || 'all');
   const [summary, setSummary] = useState(null);
   const [dailyData, setDailyData] = useState([]);
   const [expenseData, setExpenseData] = useState(null);
   const [donorLedger, setDonorLedger] = useState([]);
   const [bookWiseSummary, setBookWiseSummary] = useState(null);
+  const [pendingData, setPendingData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [ledgerSearch, setLedgerSearch] = useState('');
   const [ledgerFilter, setLedgerFilter] = useState('all');
+  const [pendingSearch, setPendingSearch] = useState('');
+  const [collapsedBooks, setCollapsedBooks] = useState({});
   const [downloadingSheet, setDownloadingSheet] = useState(false);
 
   const balanceSheetRef = useRef();
 
-  const loadReports = () => {
+  useEffect(() => {
+    if (selectedReportBook) {
+      setSelectedBook(selectedReportBook);
+    }
+  }, [selectedReportBook]);
+
+  const handleSelectBook = (bNo) => {
+    setSelectedBook(bNo);
+    if (setSelectedReportBook) setSelectedReportBook(bNo);
+  };
+
+  const toggleCollapseBook = (bookNo) => {
+    setCollapsedBooks((prev) => ({
+      ...prev,
+      [bookNo]: !prev[bookNo],
+    }));
+  };
+
+  const loadReports = (showSpinner = true) => {
     if (!activeFestival) return;
-    setLoading(true);
+    if (showSpinner) setLoading(true);
 
     let query = `?festivalId=${activeFestival._id}`;
-    if (selectedBook !== 'all') query += `&bookNo=${encodeURIComponent(selectedBook)}`;
     if (startDate) query += `&startDate=${startDate}`;
     if (endDate) query += `&endDate=${endDate}`;
-
-    let donorQuery = `?festivalId=${activeFestival._id}`;
-    if (selectedBook !== 'all') donorQuery += `&bookNo=${encodeURIComponent(selectedBook)}`;
 
     Promise.all([
       api.get(`/reports/financial-summary${query}`),
       api.get(`/reports/daily?festivalId=${activeFestival._id}`),
       api.get(`/reports/expenses-summary?festivalId=${activeFestival._id}`),
-      api.get(`/reports/donor-wise${donorQuery}`),
+      api.get(`/reports/donor-wise?festivalId=${activeFestival._id}`),
       api.get(`/reports/book-wise-summary?festivalId=${activeFestival._id}`),
+      api.get(`/reports/pending-vargani?festivalId=${activeFestival._id}`),
     ])
-      .then(([sum, daily, exp, donors, bookSum]) => {
+      .then(([sum, daily, exp, donors, bookSum, pending]) => {
         setSummary(sum);
         setDailyData(daily);
         setExpenseData(exp);
         setDonorLedger(donors);
         setBookWiseSummary(bookSum);
+        setPendingData(pending);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    loadReports();
-  }, [activeFestival, startDate, endDate, selectedBook]);
+    loadReports(true);
+  }, [activeFestival, startDate, endDate]);
 
   // Export to CSV / Excel (Filtered by selected book if chosen - Admin & Treasurer only)
   const handleExportCSV = async () => {
@@ -213,24 +248,176 @@ export const ReportsView = () => {
     window.open(url, '_blank');
   };
 
-  const totalIncome = summary?.totalVargani || 0;
+  // In-memory active book calculations for instant 0ms category switching
+  const activeBookSummary = React.useMemo(() => {
+    if (selectedBook === 'all') {
+      return {
+        totalPromised: summary?.totalPromised || bookWiseSummary?.combined?.totalPromised || 0,
+        totalCollected: summary?.totalVargani || bookWiseSummary?.combined?.totalCollected || 0,
+        totalRemaining: summary?.totalRemaining || bookWiseSummary?.combined?.totalRemaining || 0,
+      };
+    }
+    const b = bookWiseSummary?.books?.find(
+      (item) => item.bookNo.toLowerCase() === selectedBook.trim().toLowerCase()
+    );
+    if (b) {
+      return {
+        totalPromised: b.totalPromised,
+        totalCollected: b.totalCollected,
+        totalRemaining: b.totalRemaining,
+      };
+    }
+    return { totalPromised: 0, totalCollected: 0, totalRemaining: 0 };
+  }, [selectedBook, summary, bookWiseSummary]);
+
+  const totalIncome = selectedBook === 'all'
+    ? (summary?.totalVargani || 0)
+    : activeBookSummary.totalCollected;
   const totalExp = summary?.totalExpenses || 0;
   const totalFlow = totalIncome + totalExp || 1;
   const incomePercent = Math.round((totalIncome / totalFlow) * 100);
   const expensePercent = Math.round((totalExp / totalFlow) * 100);
 
-  // Filtered donor ledger
-  const filteredDonors = donorLedger.filter((d) => {
-    if (ledgerFilter !== 'all' && d.status !== ledgerFilter) return false;
-    if (ledgerSearch.trim()) {
-      const q = ledgerSearch.toLowerCase().trim();
-      const matchName = d.name && d.name.toLowerCase().includes(q);
-      const matchBook = d.bookNo && d.bookNo.toLowerCase().includes(q);
-      const matchMobile = d.mobile && d.mobile.includes(q);
-      return matchName || matchBook || matchMobile;
+  // Filtered donor ledger (respects selectedBook, filter, and search instantly in-memory)
+  const filteredDonors = React.useMemo(() => {
+    return donorLedger.filter((d) => {
+      if (selectedBook !== 'all' && (d.bookNo || '').toLowerCase() !== selectedBook.trim().toLowerCase()) {
+        return false;
+      }
+      if (ledgerFilter !== 'all' && d.status !== ledgerFilter) return false;
+      if (ledgerSearch.trim()) {
+        const q = ledgerSearch.toLowerCase().trim();
+        const matchName = d.name && d.name.toLowerCase().includes(q);
+        const matchBook = d.bookNo && d.bookNo.toLowerCase().includes(q);
+        const matchMobile = d.mobile && d.mobile.includes(q);
+        return matchName || matchBook || matchMobile;
+      }
+      return true;
+    });
+  }, [donorLedger, selectedBook, ledgerFilter, ledgerSearch]);
+
+  // Compute pending metrics for active selection
+  const selectedPendingBookObj = selectedBook === 'all'
+    ? null
+    : (pendingData?.books?.find((b) => b.bookNo.toLowerCase() === selectedBook.trim().toLowerCase()) || null);
+
+  const currentPendingAmount = selectedBook === 'all'
+    ? (pendingData?.overall?.totalPendingAmount || 0)
+    : (selectedPendingBookObj?.totalPendingAmount || 0);
+
+  const currentPromisedAmount = selectedBook === 'all'
+    ? (pendingData?.overall?.totalPromised || 0)
+    : (selectedPendingBookObj?.totalPromised || 0);
+
+  const currentPaidAmount = selectedBook === 'all'
+    ? (pendingData?.overall?.totalPaid || 0)
+    : (selectedPendingBookObj?.totalPaid || 0);
+
+  const currentPendingCount = selectedBook === 'all'
+    ? (pendingData?.overall?.count || 0)
+    : (selectedPendingBookObj?.pendingCount || 0);
+
+  const currentPercent = currentPromisedAmount > 0
+    ? Math.min(100, Math.round((currentPaidAmount / currentPromisedAmount) * 100))
+    : 0;
+
+  // Filter books and donors based on selectedBook and pendingSearch
+  const displayedPendingBooks = React.useMemo(() => {
+    if (!pendingData?.books) return [];
+    let sourceBooks = pendingData.books;
+    if (selectedBook !== 'all') {
+      sourceBooks = sourceBooks.filter((b) => b.bookNo.toLowerCase() === selectedBook.trim().toLowerCase());
     }
-    return true;
-  });
+
+    if (!pendingSearch.trim()) return sourceBooks;
+
+    const s = pendingSearch.trim().toLowerCase();
+    return sourceBooks
+      .map((b) => {
+        const filteredDonors = b.donors.filter(
+          (d) =>
+            (d.name && d.name.toLowerCase().includes(s)) ||
+            (d.mobile && d.mobile.includes(s)) ||
+            (d.bookNo && d.bookNo.toLowerCase().includes(s))
+        );
+        return {
+          ...b,
+          donors: filteredDonors,
+        };
+      })
+      .filter((b) => b.donors.length > 0);
+  }, [pendingData, selectedBook, pendingSearch]);
+
+  const pendingDonorsFiltered = React.useMemo(() => {
+    const list = [];
+    displayedPendingBooks.forEach((b) => list.push(...b.donors));
+    return list;
+  }, [displayedPendingBooks]);
+
+  const handleExportPendingCSV = () => {
+    if (!canExportReports) {
+      showToast('अहवाल डाऊनलोड करण्याचे अधिकार केवळ ॲडमिन व खजिनदारांसाठी आहेत', 'error');
+      return;
+    }
+    try {
+      const data = pendingDonorsFiltered;
+      if (!data || data.length === 0) {
+        showToast('कोणताही बाकी देणगीदार डेटा उपलब्ध नाही', 'error');
+        return;
+      }
+
+      const headers = [
+        'Sr No',
+        'Donor Name',
+        'Mobile',
+        'Book Category',
+        'Physical Receipt No',
+        'Promised Amount',
+        'Total Paid',
+        'Remaining / Pending Amount',
+        'Status',
+      ];
+      const rows = data.map((d, index) => [
+        index + 1,
+        `"${(d.name || '').replace(/"/g, '""')}"`,
+        `"${(d.mobile || '').replace(/"/g, '""')}"`,
+        `"${(d.bookNo || (selectedBook !== 'all' ? selectedBook : '')).replace(/"/g, '""')}"`,
+        `"${(d.physicalReceiptNo || '').replace(/"/g, '""')}"`,
+        d.promisedAmount || 0,
+        d.totalPaid || 0,
+        d.remaining || 0,
+        `"${d.status === 'partially_paid' ? 'अपूर्ण (Partially Paid)' : 'बाकी (Pending)'}"`,
+      ]);
+
+      const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const fileLabel = selectedBook !== 'all' ? selectedBook.replace(/[^a-zA-Z0-9_-]/g, '_') : 'All_Books';
+      link.setAttribute('download', `Pending_Donors_${fileLabel}_${activeFestival?.year || 2026}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast(`बाकी वर्गणीदार यादी (${selectedBook !== 'all' ? selectedBook : 'सर्व वह्या'}) Excel डाऊनलोड झाली!`);
+    } catch (err) {
+      showToast('CSV डाऊनलोड करताना त्रुटी आली', 'error');
+    }
+  };
+
+  const handleSharePendingSummaryWhatsApp = () => {
+    if (!pendingData) return;
+    const books = pendingData.books || [];
+    let lines = '';
+    books.forEach((b) => {
+      lines += `📖 *${b.label}:* ${b.pendingCount} बाकीदार • बाकी: ₹${b.totalPendingAmount.toLocaleString('en-IN')}\n`;
+    });
+
+    const text = `🚩 *${activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ, सोलापूर'}*\n*${activeFestival?.name || 'नवरात्र उत्सव २०२६'}*\n\n📋 *वहीनिहाय बाकी वर्गणीदार सारांश (Pending Vargani Summary)*\n\n${lines}\n═══════════════════\n💰 *एकूण बाकी वर्गणी: ₹${(pendingData.overall?.totalPendingAmount || 0).toLocaleString('en-IN')}*\n👥 *एकूण थकबाकीदार: ${pendingData.overall?.count || 0}*\n═══════════════════\n\n📌 सर्व कार्यकर्त्यांनी आपापल्या वहीनुसार राहिलेली वर्गणी जमा करावी ही नम्र विनंती!`;
+
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
 
   return (
     <div className="space-y-4 pb-24 pt-1">
@@ -245,7 +432,7 @@ export const ReportsView = () => {
         <div className="flex gap-2">
           {canExportReports && (
             <button
-              onClick={handleExportCSV}
+              onClick={reportSubTab === 'pending' ? handleExportPendingCSV : handleExportCSV}
               className="px-3 py-1.5 rounded-xl bg-[#1c1f26] border border-[#2b2f3a] text-[#2DD4BF] text-xs font-bold flex items-center gap-1.5 hover:bg-[#252833] transition"
               title="Export CSV"
             >
@@ -277,7 +464,7 @@ export const ReportsView = () => {
 
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
           <button
-            onClick={() => setSelectedBook('all')}
+            onClick={() => handleSelectBook('all')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition flex items-center gap-1.5 ${
               selectedBook === 'all'
                 ? 'bg-[#FF5A1F] text-white shadow-md'
@@ -285,15 +472,16 @@ export const ReportsView = () => {
             }`}
           >
             <Layers size={13} />
-            <span>सर्व वह्या एकत्र (Combined Report)</span>
+            <span>सर्व वह्या एकत्र (Combined)</span>
           </button>
 
           {bookWiseSummary?.books?.map((b) => {
             const isSelected = selectedBook === b.bookNo;
+            const bookPending = pendingData?.books?.find((pb) => pb.bookNo === b.bookNo)?.totalPendingAmount || 0;
             return (
               <button
                 key={b.bookNo}
-                onClick={() => setSelectedBook(b.bookNo)}
+                onClick={() => handleSelectBook(b.bookNo)}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition flex items-center gap-1.5 ${
                   isSelected
                     ? 'bg-[#0f2d29] border border-[#2DD4BF] text-[#2DD4BF] shadow-md font-extrabold'
@@ -305,47 +493,69 @@ export const ReportsView = () => {
                 <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-mono ${isSelected ? 'bg-[#164e47] text-white' : 'bg-[#252833] text-zinc-400'}`}>
                   {formatINR(b.totalCollected)}
                 </span>
+                {bookPending > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-md text-[9.5px] font-mono font-bold bg-amber-950/70 text-amber-400 border border-amber-800/60" title={`बाकी: ${formatINR(bookPending)}`}>
+                    बाकी {formatINR(bookPending)}
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Sub-Tabs: Overview | Official Balance Sheet | Donor Ledger */}
-      <div className="flex bg-[#16171c] p-1 rounded-2xl border border-[#262932]">
+      {/* Sub-Tabs: Overview | Pending Donors by Book | Official Balance Sheet | Donor Ledger */}
+      <div className="grid grid-cols-4 bg-[#16171c] p-1 rounded-2xl border border-[#262932] gap-1">
         <button
           onClick={() => setReportSubTab('overview')}
-          className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+          className={`py-2 px-1 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${
             reportSubTab === 'overview'
               ? 'bg-[#FF5A1F] text-white shadow-md'
               : 'text-zinc-400 hover:text-white'
           }`}
         >
-          <BarChart3 size={14} />
-          <span>वित्तीय सारांश</span>
+          <BarChart3 size={13} />
+          <span className="truncate">वित्तीय सारांश</span>
+        </button>
+        <button
+          onClick={() => setReportSubTab('pending')}
+          className={`py-2 px-1 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 relative ${
+            reportSubTab === 'pending'
+              ? 'bg-[#FF5A1F] text-white shadow-md'
+              : 'text-zinc-400 hover:text-white'
+          }`}
+        >
+          <Clock size={13} className={reportSubTab === 'pending' ? 'text-white' : 'text-amber-400'} />
+          <span className="truncate">बाकीदार</span>
+          {(pendingData?.overall?.count || 0) > 0 && (
+            <span className={`px-1.5 py-0.2 rounded-full text-[9.5px] font-bold ${
+              reportSubTab === 'pending' ? 'bg-amber-300 text-zinc-950' : 'bg-amber-950 text-amber-300 border border-amber-700/60'
+            }`}>
+              {pendingData?.overall?.count}
+            </span>
+          )}
         </button>
         <button
           onClick={() => setReportSubTab('statement')}
-          className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+          className={`py-2 px-1 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${
             reportSubTab === 'statement'
               ? 'bg-[#FF5A1F] text-white shadow-md'
               : 'text-zinc-400 hover:text-white'
           }`}
         >
-          <FileText size={14} />
-          <span>जमा-खर्च ताळेबंद</span>
+          <FileText size={13} />
+          <span className="truncate">ताळेबंद</span>
         </button>
         <button
-          onClick={() => setReportSubTab('ledger')
-          }
-          className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+          onClick={() => setReportSubTab('ledger')}
+          className={`py-2 px-1 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${
             reportSubTab === 'ledger'
               ? 'bg-[#FF5A1F] text-white shadow-md'
               : 'text-zinc-400 hover:text-white'
           }`}
         >
-          <Users size={14} />
-          <span>देणगीदार लेजर ({donorLedger.length})</span>
+          <Users size={13} />
+          <span className="truncate">लेजर ({donorLedger.length})</span>
         </button>
       </div>
 
@@ -608,6 +818,338 @@ export const ReportsView = () => {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB: PENDING DONORS BY BOOK CATEGORY (वहीनिहाय बाकी वर्गणीदार) */}
+      {reportSubTab === 'pending' && (
+        <div className="space-y-4">
+          {/* Action Toolbar */}
+          <div className="flex items-center justify-between gap-2 p-3 bg-[#16181d] border border-[#262932] rounded-2xl">
+            <span className="text-xs text-zinc-300 font-semibold flex items-center gap-1.5">
+              <Clock size={16} className="text-amber-400" />
+              <span>
+                {selectedBook === 'all'
+                  ? 'सर्व वह्या एकत्र थकबाकीदार यादी'
+                  : `वही क्र. ${selectedBook} थकबाकीदार यादी`}
+              </span>
+            </span>
+            <div className="flex gap-2 items-center">
+              <button
+                onClick={handleSharePendingSummaryWhatsApp}
+                className="px-2.5 py-1.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-zinc-950 text-xs font-bold flex items-center gap-1.5 transition"
+                title="WhatsApp वर बाकी सारांश शेअर करा"
+              >
+                <Share2 size={13} />
+                <span className="hidden sm:inline">WhatsApp</span>
+              </button>
+              {canExportReports && (
+                <button
+                  onClick={handleExportPendingCSV}
+                  className="px-3 py-1.5 rounded-xl bg-[#1c1f26] border border-[#2b2f3a] text-[#2DD4BF] text-xs font-bold flex items-center gap-1.5 hover:bg-[#252833] transition"
+                  title="Export Pending Donors CSV"
+                >
+                  <FileSpreadsheet size={14} />
+                  <span>Excel (CSV)</span>
+                </button>
+              )}
+              <button
+                onClick={() => window.print()}
+                className="p-1.5 rounded-xl bg-[#20222a] text-zinc-300 hover:text-white transition"
+                title="Print"
+              >
+                <Printer size={15} />
+              </button>
+            </div>
+          </div>
+
+          {/* Pending Overview Financial Banner Card */}
+          <div className="rounded-[28px] bg-gradient-to-br from-[#23150c] to-[#120f0c] border border-[#52331b] p-5 shadow-xl space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-xs font-semibold text-amber-300 uppercase tracking-wider block flex items-center gap-1.5">
+                  <AlertCircle size={14} className="text-amber-400" />
+                  <span>
+                    {selectedBook === 'all'
+                      ? 'एकूण बाकी वर्गणी रक्कम (Total Remaining Balance)'
+                      : `वही क्र. ${selectedBook} बाकी रक्कम`}
+                  </span>
+                </span>
+                <div className="text-3xl sm:text-4xl font-black text-amber-400 tracking-tight mt-1">
+                  {formatINR(currentPendingAmount)}
+                </div>
+                <p className="text-[11.5px] text-zinc-400 mt-1 font-mono">
+                  {currentPendingCount} देणगीदारांची वर्गणी येणे बाकी आहे
+                </p>
+              </div>
+
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#381c0e] text-amber-300 border border-[#6b3518]">
+                {selectedBook === 'all' ? 'सर्व वह्या' : `वही: ${selectedBook}`}
+              </span>
+            </div>
+
+            {/* 3 Metric Cards for Pending Scope */}
+            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[#3a2014] text-center">
+              <div className="bg-[#17120e] p-2.5 rounded-xl border border-[#2a1b12]">
+                <span className="text-[10px] text-zinc-400 block font-medium">ठरलेली वर्गणी</span>
+                <span className="text-sm font-bold text-zinc-200">
+                  {formatINR(currentPromisedAmount)}
+                </span>
+              </div>
+              <div className="bg-[#17120e] p-2.5 rounded-xl border border-[#2a1b12]">
+                <span className="text-[10px] text-zinc-400 block font-medium">जमा वर्गणी</span>
+                <span className="text-sm font-bold text-emerald-400">
+                  {formatINR(currentPaidAmount)}
+                </span>
+              </div>
+              <div className="bg-[#17120e] p-2.5 rounded-xl border border-[#2a1b12]">
+                <span className="text-[10px] text-amber-300 block font-bold">बाकी वर्गणी</span>
+                <span className="text-sm font-black text-amber-400">
+                  {formatINR(currentPendingAmount)}
+                </span>
+              </div>
+            </div>
+
+            {/* Collection Progress */}
+            {currentPromisedAmount > 0 && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-zinc-400">
+                  <span>संकलन प्रगती: {currentPercent}%</span>
+                  <span className="text-amber-400">बाकी: {100 - currentPercent}%</span>
+                </div>
+                <div className="h-2 w-full bg-[#20150f] rounded-full overflow-hidden flex">
+                  <div
+                    style={{ width: `${currentPercent}%` }}
+                    className="h-full bg-emerald-500 rounded-full"
+                  />
+                  <div
+                    style={{ width: `${100 - currentPercent}%` }}
+                    className="h-full bg-amber-500 rounded-full"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Book Category Selector Pills for Pending */}
+          <div className="bg-[#15171d] p-3 rounded-2xl border border-[#252833] space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-zinc-300 flex items-center gap-1.5">
+                <BookOpen size={14} className="text-amber-400" />
+                <span>वही वर्गवारी निवडा (Select Book Category):</span>
+              </span>
+              <span className="text-[11px] text-zinc-400 font-medium">
+                {pendingData?.books?.length || 0} वह्यांमध्ये बाकी
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+              <button
+                onClick={() => handleSelectBook('all')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition flex items-center gap-1.5 ${
+                  selectedBook === 'all'
+                    ? 'bg-[#FF5A1F] text-white shadow-md'
+                    : 'bg-[#1c1f26] border border-[#2c303c] text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Layers size={13} />
+                <span>सर्व वह्या ({pendingData?.overall?.count || 0})</span>
+              </button>
+
+              {pendingData?.books?.map((b) => {
+                const isSelected = selectedBook === b.bookNo;
+                return (
+                  <button
+                    key={b.bookNo}
+                    onClick={() => handleSelectBook(b.bookNo)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition flex items-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-[#3b2314] border border-amber-500 text-amber-300 shadow-md font-extrabold'
+                        : 'bg-[#1c1f26] border border-[#2c303c] text-zinc-300 hover:text-white'
+                    }`}
+                  >
+                    <BookOpen size={13} className={isSelected ? 'text-amber-400' : 'text-zinc-500'} />
+                    <span>{b.label}</span>
+                    <span className={`px-1.5 py-0.2 rounded-md text-[10.5px] font-mono font-bold ${
+                      isSelected ? 'bg-amber-500/20 text-amber-300' : 'bg-[#252833] text-amber-400'
+                    }`}>
+                      {formatINR(b.totalPendingAmount)}
+                    </span>
+                    <span className="text-[10px] text-zinc-400">({b.pendingCount})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Search Bar for Pending Donors */}
+          <div className="relative">
+            <Search size={18} className="absolute left-3.5 top-3 text-zinc-400" />
+            <input
+              type="text"
+              value={pendingSearch}
+              onChange={(e) => setPendingSearch(e.target.value)}
+              placeholder="बाकी देणगीदाराचे नाव, मोबाईल किंवा वही क्र. शोधा..."
+              className="w-full bg-[#181a1f] border border-[#272b36] rounded-2xl pl-10 pr-4 py-2.5 text-zinc-100 text-sm focus:outline-none focus:border-amber-500 transition placeholder:text-zinc-500"
+            />
+            {pendingSearch && (
+              <button
+                onClick={() => setPendingSearch('')}
+                className="absolute right-3.5 top-3 text-zinc-400 hover:text-white"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Pending Donors List / Grouped by Book Category */}
+          {loading ? (
+            <div className="py-12 text-center text-zinc-500 text-xs">लोड होत आहे...</div>
+          ) : displayedPendingBooks.length === 0 ? (
+            <div className="rounded-[24px] bg-[#16171c] border border-[#252832] p-8 text-center space-y-3">
+              <div className="w-14 h-14 rounded-full bg-[#143323] text-[#22C55E] flex items-center justify-center mx-auto border border-[#1b4e33]">
+                <CheckCircle2 size={30} />
+              </div>
+              <h4 className="text-base font-bold text-white">अभिनंदन! कोणतीही वर्गणी बाकी नाही</h4>
+              <p className="text-xs text-zinc-400">
+                {selectedBook === 'all'
+                  ? 'सर्व वह्यांमधील देणगीदारांची वर्गणी १००% जमा झाली आहे!'
+                  : `वही क्र. ${selectedBook} मधील सर्व देणगीदारांची वर्गणी पूर्ण जमा झाली आहे!`}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {displayedPendingBooks.map((bookGroup) => {
+                const isCollapsed = !!collapsedBooks[bookGroup.bookNo];
+                return (
+                  <div
+                    key={bookGroup.bookNo}
+                    className="rounded-[24px] bg-[#16171c] border border-[#2b2520] overflow-hidden shadow-md"
+                  >
+                    {/* Book Category Section Header */}
+                    <div
+                      onClick={() => toggleCollapseBook(bookGroup.bookNo)}
+                      className="p-3.5 bg-gradient-to-r from-[#1e1713] to-[#16171c] border-b border-[#2c221a] flex items-center justify-between cursor-pointer hover:bg-[#251c16] transition"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-[#372314] text-[#FB923C] flex items-center justify-center border border-[#52331b]">
+                          <BookOpen size={16} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-extrabold text-sm text-zinc-100">
+                              {bookGroup.label}
+                            </h3>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/70 text-amber-300 border border-amber-800">
+                              {bookGroup.donors.length} बाकीदार
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-zinc-400 mt-0.5">
+                            ठरलेली: {formatINR(bookGroup.totalPromised)} • जमा: {formatINR(bookGroup.totalPaid)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2.5">
+                        <div className="text-right">
+                          <span className="text-[10px] text-zinc-400 block uppercase font-medium">बाकी रक्कम</span>
+                          <span className="text-sm sm:text-base font-black text-amber-400">
+                            {formatINR(bookGroup.totalPendingAmount)}
+                          </span>
+                        </div>
+                        <button className="text-zinc-400 p-1">
+                          {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Donors List in this Book */}
+                    {!isCollapsed && (
+                      <div className="p-3 space-y-2.5 divide-y divide-[#21242d]">
+                        {bookGroup.donors.map((donor, dIndex) => (
+                          <div
+                            key={donor.donorId}
+                            className="pt-2.5 first:pt-0 space-y-2"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="w-5 h-5 rounded-full bg-[#20222a] text-zinc-400 text-[10px] font-bold flex items-center justify-center">
+                                    {dIndex + 1}
+                                  </span>
+                                  <h4 className="font-bold text-sm text-zinc-100">
+                                    {donor.name}
+                                  </h4>
+                                  <span className="px-2 py-0.5 rounded-md bg-[#1d1f27] border border-[#2b2e38] text-zinc-300 text-[10px] font-medium">
+                                    {bookGroup.label}
+                                  </span>
+                                  {donor.status === 'partially_paid' ? (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/60 text-amber-400 border border-amber-800">
+                                      अपूर्ण (काही जमा)
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/60 text-red-400 border border-red-800">
+                                      बाकी (शून्य जमा)
+                                    </span>
+                                  )}
+                                </div>
+                                {donor.mobile && (
+                                  <p className="text-[11px] text-zinc-400 flex items-center gap-1">
+                                    <span>मो: {donor.mobile}</span>
+                                    {donor.physicalReceiptNo && <span>• पावती क्र. {donor.physicalReceiptNo}</span>}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => handleSendReminder(donor)}
+                                  className="p-1.5 rounded-lg bg-[#143d2c] text-[#25D366] hover:bg-[#1a523b] transition"
+                                  title="WhatsApp आठवण पाठवा"
+                                >
+                                  <MessageSquare size={14} />
+                                </button>
+                                <button
+                                  onClick={() => openNewPayment({
+                                    _id: donor.donorId,
+                                    name: donor.name,
+                                    promisedAmount: donor.promisedAmount,
+                                    totalPaid: donor.totalPaid,
+                                    bookNo: donor.bookNo,
+                                  })}
+                                  className="px-2.5 py-1 rounded-xl bg-[#FF5A1F] text-white text-xs font-bold hover:bg-[#E04C00] transition"
+                                >
+                                  + हप्ता
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Financial Amount Bar for Donor */}
+                            <div className="grid grid-cols-3 gap-2 bg-[#121316] p-2 rounded-xl border border-[#20222a] text-center text-xs">
+                              <div>
+                                <span className="text-[10px] text-zinc-500 block">ठरलेली वर्गणी</span>
+                                <span className="font-bold text-zinc-300">{formatINR(donor.promisedAmount)}</span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-zinc-500 block">जमा रक्कम</span>
+                                <span className="font-bold text-emerald-400">{formatINR(donor.totalPaid)}</span>
+                              </div>
+                              <div className="bg-[#241710] rounded-lg py-0.5 border border-[#3d2416]">
+                                <span className="text-[10px] text-amber-300 block font-bold">बाकी / शिल्लक रक्कम</span>
+                                <span className="font-black text-amber-400 text-xs sm:text-sm">
+                                  {formatINR(donor.remaining)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

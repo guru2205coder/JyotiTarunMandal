@@ -1,4 +1,4 @@
-// Central API client with Auth Bearer token support
+// Central API client with Auth Bearer token support and in-memory cache for instant UI rendering
 // Supports both relative /api (local proxy & Vercel monorepo) and external production URL (VITE_API_URL)
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') + '/api';
 
@@ -11,8 +11,35 @@ const getHeaders = (customHeaders = {}) => {
   return headers;
 };
 
+// In-memory cache for fast tab and category switching (30-second TTL)
+const cache = new Map();
+const CACHE_TTL_MS = 30000;
+
 export const api = {
-  async get(url) {
+  clearCache(prefix = '') {
+    if (!prefix) {
+      cache.clear();
+    } else {
+      for (const key of cache.keys()) {
+        if (key.startsWith(prefix)) {
+          cache.delete(key);
+        }
+      }
+    }
+  },
+
+  async get(url, options = {}) {
+    const { bypassCache = false } = options;
+    const now = Date.now();
+
+    if (!bypassCache && cache.has(url)) {
+      const entry = cache.get(url);
+      if (now - entry.timestamp < CACHE_TTL_MS) {
+        return entry.data;
+      }
+      cache.delete(url);
+    }
+
     const res = await fetch(`${API_BASE}${url}`, {
       headers: getHeaders(),
     });
@@ -20,10 +47,13 @@ export const api = {
       const err = await res.json().catch(() => ({ message: res.statusText }));
       throw new Error(err.message || 'Request failed');
     }
-    return res.json();
+    const data = await res.json();
+    cache.set(url, { timestamp: now, data });
+    return data;
   },
 
   async post(url, data) {
+    api.clearCache();
     const res = await fetch(`${API_BASE}${url}`, {
       method: 'POST',
       headers: getHeaders({ 'Content-Type': 'application/json' }),
@@ -39,6 +69,7 @@ export const api = {
   },
 
   async put(url, data) {
+    api.clearCache();
     const res = await fetch(`${API_BASE}${url}`, {
       method: 'PUT',
       headers: getHeaders({ 'Content-Type': 'application/json' }),
@@ -52,6 +83,7 @@ export const api = {
   },
 
   async delete(url) {
+    api.clearCache();
     const res = await fetch(`${API_BASE}${url}`, {
       method: 'DELETE',
       headers: getHeaders(),

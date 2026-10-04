@@ -84,4 +84,8 @@ const expenseSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Compound indexes for rapid festival-level expense queries
+expenseSchema.index({ festivalId: 1, date: -1 });
+expenseSchema.index({ festivalId: 1, category: 1 });
+
 export const Expense = mongoose.model('Expense', expenseSchema);

@@ -64,6 +64,10 @@ const donorSchema = new mongoose.Schema(
   }
 );
 
+// Indexes for rapid queries and book category lookups
+donorSchema.index({ festivalId: 1, bookNo: 1 });
+donorSchema.index({ festivalId: 1, createdAt: -1 });
+
 // Virtual for payments
 donorSchema.virtual('payments', {
   ref: 'Payment',

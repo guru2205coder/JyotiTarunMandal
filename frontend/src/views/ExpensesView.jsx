@@ -15,30 +15,38 @@ export const ExpensesView = () => {
 
   const canManageExpenses = user?.role === 'Admin' || user?.role === 'Treasurer';
 
-  const [expenses, setExpenses] = useState([]);
+  const [allExpenses, setAllExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [totalAmount, setTotalAmount] = useState(0);
   const [previewBillUrl, setPreviewBillUrl] = useState(null);
 
-  const loadExpenses = () => {
+  const loadExpenses = (showSpinner = false) => {
     if (!activeFestival) return;
-    setLoading(true);
-    let url = `/expenses?festivalId=${activeFestival._id}`;
-    if (selectedCategory !== 'All') url += `&category=${selectedCategory}`;
-
-    api.get(url)
+    if (showSpinner) setLoading(true);
+    api.get(`/expenses?festivalId=${activeFestival._id}`)
       .then((data) => {
-        setExpenses(data.expenses || []);
-        setTotalAmount(data.totalAmount || 0);
+        setAllExpenses(Array.isArray(data.expenses) ? data.expenses : []);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    loadExpenses();
-  }, [activeFestival, selectedCategory]);
+    loadExpenses(true);
+  }, [activeFestival]);
+
+  // Instant 0ms in-memory filtering across expense categories
+  const expenses = React.useMemo(() => {
+    if (selectedCategory === 'All') return allExpenses;
+    return allExpenses.filter(
+      (e) => (e.category || '').toLowerCase() === selectedCategory.toLowerCase()
+    );
+  }, [allExpenses, selectedCategory]);
+
+  // Dynamically compute total amount for currently selected category
+  const totalAmount = React.useMemo(() => {
+    return expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+  }, [expenses]);
 
   const handleDeleteExpense = async (id, title) => {
     if (!window.confirm(`खर्च "${title}" हटवायचा आहे का?`)) return;

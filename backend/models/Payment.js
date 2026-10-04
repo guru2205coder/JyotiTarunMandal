@@ -86,5 +86,7 @@ const paymentSchema = new mongoose.Schema(
 
 // Compound index for unique receipt number per festival
 paymentSchema.index({ festivalId: 1, receiptNo: 1 }, { unique: true });
+paymentSchema.index({ festivalId: 1, isReversed: 1, paymentDate: -1 });
+paymentSchema.index({ donorId: 1, isReversed: 1 });
 
 export const Payment = mongoose.model('Payment', paymentSchema);

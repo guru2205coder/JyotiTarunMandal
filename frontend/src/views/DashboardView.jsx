@@ -12,6 +12,7 @@ import {
   Users,
   Share2,
   MessageSquare,
+  BookOpen,
 } from 'lucide-react';
 
 export const DashboardView = () => {
@@ -26,12 +27,14 @@ export const DashboardView = () => {
     setIsOpeningBalanceModalOpen,
     setIsFestivalModalOpen,
     setCurrentTab,
+    openPendingDonors,
     showToast,
     language,
     user,
   } = useApp();
 
   const [isFestivalMenuOpen, setIsFestivalMenuOpen] = useState(false);
+  const [whoOwesBookFilter, setWhoOwesBookFilter] = useState('all');
 
   const stats = dashboardStats || {
     totalCollection: 0,
@@ -205,78 +208,154 @@ export const DashboardView = () => {
         </div>
       </div>
 
-      {/* "Who owes" (Pending Donors / Promises) */}
+      {/* "Who owes" (Pending Donors / Promises by Book) */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
-          <h3 className="text-xs font-semibold text-zinc-400 tracking-wider">Who owes</h3>
-          {stats.pendingVargani > 0 && (
-            <span className="text-xs text-amber-400 font-bold">
-              एकूण शिल्लक: {formatINR(stats.pendingVargani)}
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-xs font-semibold text-zinc-400 tracking-wider">Who owes</h3>
+            <span className="text-[11px] text-zinc-500 font-medium">
+              (थकबाकीदार)
             </span>
+          </div>
+          {stats.pendingVargani > 0 && (
+            <button
+              onClick={() => openPendingDonors(whoOwesBookFilter)}
+              className="text-xs text-amber-400 hover:text-amber-300 font-bold transition flex items-center gap-1"
+            >
+              <span>बाकी: {formatINR(stats.pendingVargani)}</span>
+              <span className="text-[11px] text-zinc-500 font-normal">→</span>
+            </button>
           )}
         </div>
 
-        {/* If nothing is pending, show the exact checkmark state from screenshot image-4.png */}
-        {(!stats.whoOwesList || stats.whoOwesList.length === 0) ? (
-          <div className="rounded-[24px] bg-[#16171c] border border-[#252832] p-6 text-center shadow-md">
-            <div className="w-14 h-14 rounded-full bg-[#143323] text-[#22C55E] flex items-center justify-center mx-auto mb-3 border border-[#1b4e33]">
-              <CheckCircle size={28} />
-            </div>
-            <h4 className="text-sm font-bold text-white">Nothing pending</h4>
-            <p className="text-xs text-zinc-400 mt-0.5">सर्व वर्गणी जमा झाली आहे</p>
-            <button
-              onClick={() => openAddDonor()}
-              className="mt-3 text-xs text-[#FF5A1F] hover:text-[#ff7438] font-bold inline-block hover:underline"
-            >
-              Record a promise
-            </button>
-          </div>
-        ) : (
-          <div className="rounded-[24px] bg-[#16171c] border border-[#252832] divide-y divide-[#21242d] overflow-hidden shadow-md">
-            {stats.whoOwesList.slice(0, 4).map((donor) => (
-              <div
-                key={donor.donorId}
-                className="p-3.5 flex items-center justify-between hover:bg-[#1a1c22] transition"
-              >
-                <div>
-                  <h4 className="text-sm font-bold text-zinc-100">
-                    {donor.name}
-                  </h4>
-                  <p className="text-xs text-zinc-400">
-                    ठरलेली: {formatINR(donor.promised)} • जमा: {formatINR(donor.paid)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-extrabold text-amber-400 mr-1">
-                    {formatINR(donor.remaining)}
-                  </span>
-                  <button
-                    onClick={() => handleSendReminder(donor)}
-                    className="p-1.5 rounded-lg bg-[#143d2c] text-[#25D366] hover:bg-[#1a523b] transition"
-                    title="WhatsApp वर आठवण पाठवा"
-                  >
-                    <MessageSquare size={13} />
-                  </button>
-                  <button
-                    onClick={() => openNewPayment({ _id: donor.donorId, name: donor.name, promisedAmount: donor.promised, totalPaid: donor.paid })}
-                    className="px-2.5 py-1 rounded-xl bg-[#FF5A1F] text-white text-xs font-bold hover:bg-[#E04C00] transition"
-                  >
-                    जमा
-                  </button>
-                </div>
-              </div>
-            ))}
+        {/* Book filter bar if multiple books */}
+        {(() => {
+          const books = new Set();
+          (stats.whoOwesList || []).forEach((d) => {
+            if (d.bookNo) books.add(d.bookNo);
+          });
+          const whoOwesBooks = Array.from(books).sort();
+          if (whoOwesBooks.length <= 1) return null;
 
-            {stats.whoOwesList.length > 4 && (
+          return (
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 px-0.5">
               <button
-                onClick={() => setCurrentTab('workers')}
-                className="w-full py-2.5 text-center text-xs font-bold text-zinc-400 hover:text-[#FF5A1F] transition"
+                onClick={() => setWhoOwesBookFilter('all')}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition ${
+                  whoOwesBookFilter === 'all'
+                    ? 'bg-amber-500 text-zinc-950'
+                    : 'bg-[#181a1f] border border-[#272b36] text-zinc-400 hover:text-white'
+                }`}
               >
-                सर्व {stats.whoOwesList.length} थकबाकीदार पहा →
+                सर्व वह्या ({stats.whoOwesList.length})
               </button>
-            )}
-          </div>
-        )}
+              {whoOwesBooks.map((bNo) => {
+                const countInBook = (stats.whoOwesList || []).filter((d) => (d.bookNo || 'Book-1') === bNo).length;
+                return (
+                  <button
+                    key={bNo}
+                    onClick={() => setWhoOwesBookFilter(bNo)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition flex items-center gap-1 ${
+                      whoOwesBookFilter === bNo
+                        ? 'bg-amber-500 text-zinc-950 font-black'
+                        : 'bg-[#181a1f] border border-[#272b36] text-zinc-300 hover:text-white'
+                    }`}
+                  >
+                    <BookOpen size={10} />
+                    <span>{bNo.startsWith('Book') ? bNo : `वही ${bNo}`}</span>
+                    <span className="text-[9.5px] opacity-80 font-mono">({countInBook})</span>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
+
+        {/* If nothing is pending, show checkmark state */}
+        {(() => {
+          const list = whoOwesBookFilter === 'all'
+            ? (stats.whoOwesList || [])
+            : (stats.whoOwesList || []).filter((d) => (d.bookNo || 'Book-1') === whoOwesBookFilter);
+
+          if (!list || list.length === 0) {
+            return (
+              <div className="rounded-[24px] bg-[#16171c] border border-[#252832] p-6 text-center shadow-md">
+                <div className="w-14 h-14 rounded-full bg-[#143323] text-[#22C55E] flex items-center justify-center mx-auto mb-3 border border-[#1b4e33]">
+                  <CheckCircle size={28} />
+                </div>
+                <h4 className="text-sm font-bold text-white">Nothing pending</h4>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  {whoOwesBookFilter === 'all' ? 'सर्व वर्गणी जमा झाली आहे' : `या वहीतील सर्व वर्गणी जमा झाली आहे`}
+                </p>
+                <button
+                  onClick={() => openAddDonor()}
+                  className="mt-3 text-xs text-[#FF5A1F] hover:text-[#ff7438] font-bold inline-block hover:underline"
+                >
+                  Record a promise
+                </button>
+              </div>
+            );
+          }
+
+          return (
+            <div className="rounded-[24px] bg-[#16171c] border border-[#252832] divide-y divide-[#21242d] overflow-hidden shadow-md">
+              {list.slice(0, 5).map((donor) => (
+                <div
+                  key={donor.donorId}
+                  className="p-3.5 flex items-center justify-between hover:bg-[#1a1c22] transition"
+                >
+                  <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h4 className="text-sm font-bold text-zinc-100">
+                        {donor.name}
+                      </h4>
+                      {donor.bookNo && (
+                        <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-[#1a1f2c] border border-[#273044] text-zinc-300">
+                          {donor.bookNo.startsWith('Book') ? donor.bookNo : `वही ${donor.bookNo}`}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      ठरलेली: {formatINR(donor.promised)} • जमा: {formatINR(donor.paid)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-extrabold text-amber-400 mr-1">
+                      {formatINR(donor.remaining)}
+                    </span>
+                    <button
+                      onClick={() => handleSendReminder(donor)}
+                      className="p-1.5 rounded-lg bg-[#143d2c] text-[#25D366] hover:bg-[#1a523b] transition"
+                      title="WhatsApp वर आठवण पाठवा"
+                    >
+                      <MessageSquare size={13} />
+                    </button>
+                    <button
+                      onClick={() => openNewPayment({
+                        _id: donor.donorId,
+                        name: donor.name,
+                        promisedAmount: donor.promised,
+                        totalPaid: donor.paid,
+                        bookNo: donor.bookNo,
+                      })}
+                      className="px-2.5 py-1 rounded-xl bg-[#FF5A1F] text-white text-xs font-bold hover:bg-[#E04C00] transition"
+                    >
+                      जमा
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                onClick={() => openPendingDonors(whoOwesBookFilter)}
+                className="w-full py-2.5 text-center text-xs font-bold text-amber-400 hover:text-amber-300 bg-[#14151a] hover:bg-[#1a1d24] transition flex items-center justify-center gap-1"
+              >
+                <span>सर्व {list.length} थकबाकीदार वहीनुसार पहा</span>
+                <span>→</span>
+              </button>
+            </div>
+          );
+        })()}
       </div>
 
 

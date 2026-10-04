@@ -47,7 +47,7 @@ export const DonorsAndWorkersView = () => {
 
   const [activeSubTab, setActiveSubTab] = useState('karyakarta'); // 'karyakarta' | 'donors'
   const [karyakartas, setKaryakartas] = useState([]);
-  const [donors, setDonors] = useState([]);
+  const [allDonors, setAllDonors] = useState([]);
   const [bookStats, setBookStats] = useState({ books: [], overall: {} });
   const [selectedBookFilter, setSelectedBookFilter] = useState('all'); // 'all' or specific bookNo
   const [loading, setLoading] = useState(true);
@@ -60,7 +60,7 @@ export const DonorsAndWorkersView = () => {
   const loadKaryakartas = () => {
     if (!activeFestival) return;
     api.get(`/users/karyakartas?festivalId=${activeFestival._id}`)
-      .then((data) => setKaryakartas(data))
+      .then((data) => setKaryakartas(Array.isArray(data) ? data : []))
       .catch(console.error);
   };
 
@@ -68,30 +68,69 @@ export const DonorsAndWorkersView = () => {
   const loadBookStats = () => {
     if (!activeFestival) return;
     api.get(`/donors/book-stats?festivalId=${activeFestival._id}`)
-      .then((data) => setBookStats(data))
+      .then((data) => setBookStats(data || { books: [], overall: {} }))
       .catch(console.error);
   };
 
   // Load Donors
-  const loadDonors = () => {
+  const loadDonors = (showSpinner = false) => {
     if (!activeFestival) return;
-    setLoading(true);
-    let url = `/donors?festivalId=${activeFestival._id}`;
-    if (donorStatusFilter !== 'all') url += `&status=${donorStatusFilter}`;
-    if (selectedBookFilter !== 'all') url += `&bookNo=${encodeURIComponent(selectedBookFilter)}`;
-    if (donorSearch.trim()) url += `&q=${encodeURIComponent(donorSearch.trim())}`;
-
-    api.get(url)
-      .then((data) => setDonors(data))
+    if (showSpinner) setLoading(true);
+    api.get(`/donors?festivalId=${activeFestival._id}`)
+      .then((data) => setAllDonors(Array.isArray(data) ? data : []))
       .catch(console.error)
       .finally(() => setLoading(false));
   };
 
+  // Load festival data in one parallel batch; tabs and category filtering are 0ms instant
   useEffect(() => {
-    loadKaryakartas();
-    loadBookStats();
-    loadDonors();
-  }, [activeFestival, donorStatusFilter, selectedBookFilter, donorSearch]);
+    if (!activeFestival) return;
+    setLoading(true);
+    Promise.all([
+      api.get(`/users/karyakartas?festivalId=${activeFestival._id}`).catch(() => []),
+      api.get(`/donors/book-stats?festivalId=${activeFestival._id}`).catch(() => ({ books: [], overall: {} })),
+      api.get(`/donors?festivalId=${activeFestival._id}`).catch(() => []),
+    ])
+      .then(([kList, bStats, dList]) => {
+        setKaryakartas(Array.isArray(kList) ? kList : []);
+        setBookStats(bStats || { books: [], overall: {} });
+        setAllDonors(Array.isArray(dList) ? dList : []);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [activeFestival]);
+
+  // Instant 0ms in-memory filtering for book categories, status pills, and search
+  const donors = React.useMemo(() => {
+    let list = allDonors;
+
+    if (selectedBookFilter !== 'all') {
+      const bNorm = selectedBookFilter.trim().toLowerCase();
+      list = list.filter((d) => (d.bookNo || '').trim().toLowerCase() === bNorm);
+    }
+
+    if (donorStatusFilter !== 'all') {
+      if (donorStatusFilter === 'pending_all' || donorStatusFilter === 'has_remaining') {
+        list = list.filter((d) => (d.remaining || 0) > 0);
+      } else {
+        list = list.filter((d) => d.status === donorStatusFilter);
+      }
+    }
+
+    if (donorSearch.trim()) {
+      const q = donorSearch.trim().toLowerCase();
+      list = list.filter((d) => {
+        const name = (d.name || '').toLowerCase();
+        const mobile = (d.mobile || '').toLowerCase();
+        const area = (d.area || '').toLowerCase();
+        const book = (d.bookNo || '').toLowerCase();
+        const receipt = (d.physicalReceiptNo || d.receiptNo || '').toString().toLowerCase();
+        return name.includes(q) || mobile.includes(q) || area.includes(q) || book.includes(q) || receipt.includes(q);
+      });
+    }
+
+    return list;
+  }, [allDonors, selectedBookFilter, donorStatusFilter, donorSearch]);
 
   const [isAddWorkerModalOpen, setIsAddWorkerModalOpen] = useState(false);
   const [workerName, setWorkerName] = useState('');
@@ -349,22 +388,33 @@ export const DonorsAndWorkersView = () => {
     }
   };
 
-  // Compute active book summary for financial statistics card
-  const activeBookObj = selectedBookFilter === 'all'
-    ? {
+  // Compute active book summary for financial statistics card (instant 0ms update)
+  const activeBookObj = React.useMemo(() => {
+    if (selectedBookFilter === 'all') {
+      return {
         label: 'सर्व पावती पुस्तके (All Books)',
-        donorCount: bookStats.overall?.totalDonors || donors.length,
-        totalPromised: bookStats.overall?.totalPromised || donors.reduce((s, d) => s + (d.promisedAmount || 0), 0),
-        totalCollected: bookStats.overall?.totalCollected || donors.reduce((s, d) => s + (d.totalPaid || 0), 0),
-        totalRemaining: bookStats.overall?.totalRemaining || donors.reduce((s, d) => s + (d.remaining || 0), 0),
-      }
-    : (bookStats.books?.find((b) => b.bookNo === selectedBookFilter) || {
-        label: `वही क्र. ${selectedBookFilter}`,
-        donorCount: donors.length,
-        totalPromised: donors.reduce((s, d) => s + (d.promisedAmount || 0), 0),
-        totalCollected: donors.reduce((s, d) => s + (d.totalPaid || 0), 0),
-        totalRemaining: donors.reduce((s, d) => s + (d.remaining || 0), 0),
-      });
+        donorCount: bookStats.overall?.totalDonors || allDonors.length,
+        totalPromised: bookStats.overall?.totalPromised || allDonors.reduce((s, d) => s + (d.promisedAmount || 0), 0),
+        totalCollected: bookStats.overall?.totalCollected || allDonors.reduce((s, d) => s + (d.totalPaid || 0), 0),
+        totalRemaining: bookStats.overall?.totalRemaining || allDonors.reduce((s, d) => s + (d.remaining || 0), 0),
+      };
+    }
+    const found = bookStats.books?.find(
+      (b) => b.bookNo.toLowerCase() === selectedBookFilter.trim().toLowerCase()
+    );
+    if (found) return found;
+
+    const bookDonors = allDonors.filter(
+      (d) => (d.bookNo || '').trim().toLowerCase() === selectedBookFilter.trim().toLowerCase()
+    );
+    return {
+      label: `वही क्र. ${selectedBookFilter}`,
+      donorCount: bookDonors.length,
+      totalPromised: bookDonors.reduce((s, d) => s + (d.promisedAmount || 0), 0),
+      totalCollected: bookDonors.reduce((s, d) => s + (d.totalPaid || 0), 0),
+      totalRemaining: bookDonors.reduce((s, d) => s + (d.remaining || 0), 0),
+    };
+  }, [selectedBookFilter, bookStats, allDonors]);
 
   const percentCollected = activeBookObj.totalPromised > 0
     ? Math.min(100, Math.round((activeBookObj.totalCollected / activeBookObj.totalPromised) * 100))
@@ -592,9 +642,22 @@ export const DonorsAndWorkersView = () => {
                   {formatINR(activeBookObj.totalCollected)}
                 </span>
               </div>
-              <div className="bg-[#121318] p-2.5 rounded-xl border border-[#20232e]">
-                <span className="text-[10px] text-zinc-400 block font-medium">शिल्लक बाकी (Remaining)</span>
-                <span className="text-sm sm:text-base font-black text-amber-400">
+              <div
+                onClick={() => setDonorStatusFilter(donorStatusFilter === 'pending_all' ? 'all' : 'pending_all')}
+                className={`p-2.5 rounded-xl border cursor-pointer transition group ${
+                  donorStatusFilter === 'pending_all'
+                    ? 'bg-[#2a170e] border-amber-500 shadow-sm'
+                    : 'bg-[#121318] border-[#20232e] hover:border-amber-500/50'
+                }`}
+                title="फक्त बाकीदार पाहण्यासाठी क्लिक करा"
+              >
+                <div className="flex items-center justify-center gap-1">
+                  <span className="text-[10px] text-zinc-400 group-hover:text-amber-300 font-medium">शिल्लक बाकी (Remaining)</span>
+                  <span className="text-[9px] text-amber-400 font-bold">
+                    {donorStatusFilter === 'pending_all' ? '✓ सक्रिय' : 'पहा →'}
+                  </span>
+                </div>
+                <span className="text-sm sm:text-base font-black text-amber-400 block mt-0.5">
                   {formatINR(activeBookObj.totalRemaining)}
                 </span>
               </div>
@@ -689,7 +752,8 @@ export const DonorsAndWorkersView = () => {
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
             {[
               { id: 'all', label: 'सर्व (All)' },
-              { id: 'pending', label: 'बाकी (Pending)' },
+              { id: 'pending_all', label: '⚠️ सर्व बाकीदार (All Pending)' },
+              { id: 'pending', label: 'बाकी (0 जमा)' },
               { id: 'partially_paid', label: 'अपूर्ण (Partial)' },
               { id: 'fully_paid', label: 'पूर्ण भरणा (Fully Paid)' },
             ].map((f) => (
@@ -814,9 +878,11 @@ export const DonorsAndWorkersView = () => {
                         <span className="text-[10px] text-zinc-500 block">एकूण जमा</span>
                         <span className="font-bold text-emerald-400">{formatINR(paid)}</span>
                       </div>
-                      <div>
-                        <span className="text-[10px] text-zinc-500 block">शिल्लक</span>
-                        <span className={`font-bold ${remaining === 0 ? 'text-zinc-500' : 'text-amber-400'}`}>
+                      <div className={`rounded-lg py-0.5 ${remaining > 0 ? 'bg-[#261710] border border-[#402315]' : ''}`}>
+                        <span className={`text-[10px] block ${remaining > 0 ? 'text-amber-300 font-semibold' : 'text-zinc-500'}`}>
+                          शिल्लक बाकी
+                        </span>
+                        <span className={`font-black ${remaining === 0 ? 'text-zinc-500' : 'text-amber-400 text-xs sm:text-sm'}`}>
                           {formatINR(remaining)}
                         </span>
                       </div>
