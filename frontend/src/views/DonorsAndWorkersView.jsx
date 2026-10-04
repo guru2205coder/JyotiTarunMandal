@@ -45,6 +45,8 @@ export const DonorsAndWorkersView = () => {
     refreshAll,
   } = useApp();
 
+  const isAdmin = user?.role?.toLowerCase() === 'admin' || user?.role === 'Admin';
+
   const [activeSubTab, setActiveSubTab] = useState('karyakarta'); // 'karyakarta' | 'donors'
   const [karyakartas, setKaryakartas] = useState([]);
   const [allDonors, setAllDonors] = useState([]);
@@ -227,13 +229,16 @@ export const DonorsAndWorkersView = () => {
   };
 
   const handleDeleteWorker = async (worker) => {
-    if (user?.role !== 'Admin') {
+    if (!isAdmin) {
       showToast('कार्यकर्ता हटवण्याचा अधिकार फक्त मुख्य ॲडमिनला आहे', 'error');
       return;
     }
 
-    if (user?._id === worker._id) {
-      showToast('तुम्ही स्वतःचे ॲडमिन खाते हटवू शकत नाही', 'error');
+    const currentUserId = user?._id || user?.id;
+    const targetUserId = worker?._id || worker?.id;
+
+    if (currentUserId && targetUserId && String(currentUserId) === String(targetUserId)) {
+      showToast('तुम्ही स्वतःचे ॲडमिन खाते हटवू शकत नाही (स्वतःचे खाते सुरक्षित आहे)', 'error');
       return;
     }
 
@@ -538,29 +543,33 @@ export const DonorsAndWorkersView = () => {
                       </span>
                       <span className="text-[10px] text-zinc-500">जमा केले</span>
                     </div>
-                    {user?.role === 'Admin' && k.mobile && (
+                    {isAdmin && k.mobile && (
                       <button
                         onClick={() => handleShareWorkerWhatsApp(k, k.initialPassword || k.password)}
-                        className="p-2 rounded-xl bg-[#25D366]/15 border border-[#25D366]/30 text-[#25D366] hover:bg-[#25D366]/25 transition"
+                        className="p-2 rounded-xl bg-[#25D366]/15 border border-[#25D366]/30 text-[#25D366] hover:bg-[#25D366]/25 transition shrink-0"
                         title="WhatsApp वर लॉगिन लिंक व तपशील पाठवा"
                       >
                         <Share2 size={15} />
                       </button>
                     )}
-                    {user?.role === 'Admin' && (
+                    {isAdmin && (
                       <button
                         onClick={() => openEditWorker(k)}
-                        className="p-2 rounded-xl bg-[#1f2230] border border-[#2e3348] text-zinc-400 hover:text-white hover:border-[#FF5A1F] transition"
+                        className="p-2 rounded-xl bg-[#1f2230] border border-[#2e3348] text-zinc-300 hover:text-white hover:border-[#FF5A1F] transition shrink-0"
                         title="कार्यकर्ता माहिती बदला (Admin only)"
                       >
                         <Edit3 size={15} />
                       </button>
                     )}
-                    {user?.role === 'Admin' && k._id !== user?._id && (
+                    {isAdmin && (
                       <button
                         onClick={() => handleDeleteWorker(k)}
-                        className="p-2 rounded-xl bg-[#29171b] border border-[#482025] text-red-400 hover:bg-[#3d1c21] hover:text-red-300 transition"
-                        title="कार्यकर्ता खाते हटवा (Admin only)"
+                        className={`p-2 rounded-xl border transition shrink-0 ${
+                          String(k._id) === String(user?._id || user?.id)
+                            ? 'bg-[#211618] border-[#381c20] text-zinc-500 hover:text-red-400'
+                            : 'bg-[#29171b] border-[#482025] text-red-400 hover:bg-[#3d1c21] hover:text-red-300'
+                        }`}
+                        title={String(k._id) === String(user?._id || user?.id) ? 'स्वतःचे खाते सुरक्षित आहे' : 'कार्यकर्ता खाते हटवा (Delete User)'}
                       >
                         <Trash2 size={15} />
                       </button>
@@ -571,14 +580,14 @@ export const DonorsAndWorkersView = () => {
           </div>
 
           {/* Non-admin notice */}
-          {user?.role !== 'Admin' && (
+          {!isAdmin && (
             <div className="bg-[#14161c] border border-[#222530] rounded-2xl p-3 text-center text-xs text-zinc-400">
               ℹ️ नवीन कार्यकर्ता जोडणे व पासवर्ड बदल करण्याचे अधिकार फक्त 👑 <strong>मुख्य ॲडमिन</strong>कडे आहेत.
             </div>
           )}
 
           {/* Add Karyakarta button (Admin only) */}
-          {user?.role === 'Admin' && (
+          {isAdmin && (
             <div className="fixed bottom-16 right-4 sm:right-8 z-30">
               <button
                 onClick={() => setIsAddWorkerModalOpen(true)}
@@ -892,10 +901,10 @@ export const DonorsAndWorkersView = () => {
                         >
                           <Edit3 size={14} />
                         </button>
-                        {user?.role === 'Admin' && (
+                        {isAdmin && (
                           <button
                             onClick={() => handleDeleteDonor(d)}
-                            className="p-1.5 rounded-lg bg-[#20222a] text-zinc-400 hover:text-red-400 hover:bg-red-950/40 transition"
+                            className="p-1.5 rounded-lg bg-[#29171b] border border-[#482025] text-red-400 hover:bg-[#3d1c21] hover:text-red-300 transition shrink-0"
                             title="देणगीदार हटवा (Delete Donor - Admin only)"
                           >
                             <Trash2 size={14} />
@@ -1314,7 +1323,7 @@ export const DonorsAndWorkersView = () => {
                 </button>
               )}
 
-              {user?.role === 'Admin' && editingWorker._id !== user?._id && (
+              {isAdmin && (
                 <div className="pt-2 border-t border-[#242731]">
                   <button
                     type="button"
