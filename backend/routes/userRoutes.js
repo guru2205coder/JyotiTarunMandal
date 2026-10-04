@@ -216,4 +216,44 @@ router.put('/profile', protect, async (req, res) => {
   }
 });
 
+// DELETE /api/users/:id (Admin only - delete karyakarta / user account)
+router.delete('/:id', protect, adminOnly, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Prevent self-deletion
+    if (req.user._id.toString() === id.toString()) {
+      return res.status(400).json({
+        message: 'तुम्ही स्वतःचे ॲडमिन खाते हटवू शकत नाही (Cannot delete your own account)',
+      });
+    }
+
+    const targetUser = await User.findById(id);
+    if (!targetUser) {
+      return res.status(404).json({ message: 'कार्यकर्ता सापडला नाही (User not found)' });
+    }
+
+    // Prevent deleting the last Admin
+    if (targetUser.role === 'Admin' || targetUser.role === 'admin') {
+      const adminCount = await User.countDocuments({
+        role: { $in: ['Admin', 'admin'] },
+      });
+      if (adminCount <= 1) {
+        return res.status(400).json({
+          message: 'मंडळात किमान एक मुख्य ॲडमिन असणे अनिवार्य आहे (Cannot delete the last admin)',
+        });
+      }
+    }
+
+    await User.findByIdAndDelete(id);
+
+    res.json({
+      success: true,
+      message: `कार्यकर्ता "${targetUser.name}" यांचे खाते यशस्वीरीत्या हटवले`,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 export default router;

@@ -231,6 +231,38 @@ export const DonorsAndWorkersView = () => {
     }
   };
 
+  const handleDeleteWorker = async (worker) => {
+    if (user?.role !== 'Admin') {
+      showToast('कार्यकर्ता हटवण्याचा अधिकार फक्त मुख्य ॲडमिनला आहे', 'error');
+      return;
+    }
+
+    if (user?._id === worker._id) {
+      showToast('तुम्ही स्वतःचे ॲडमिन खाते हटवू शकत नाही', 'error');
+      return;
+    }
+
+    let confirmMsg = `कार्यकर्ता "${worker.name}" (${worker.role}) यांचे खाते कायमचे हटवायचे आहे का?`;
+    if (worker.totalCollected && worker.totalCollected > 0) {
+      confirmMsg = `⚠️ सावधान: कार्यकर्ता "${worker.name}" यांनी ₹${worker.totalCollected.toLocaleString('en-IN')} चे संकलन केले आहे.\nत्यांचे खाते हटवले तरी यापूर्वी फाडलेल्या पावत्या व नोंदी सुरक्षित राहतील.\n\nकार्यकर्ता खाते कायमचे हटवायचे आहे का?`;
+    }
+
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await api.delete(`/users/${worker._id}`);
+      showToast(`कार्यकर्ता "${worker.name}" यांचे खाते यशस्वीरीत्या हटवले`);
+      if (isEditWorkerModalOpen && editingWorker?._id === worker._id) {
+        setIsEditWorkerModalOpen(false);
+        setEditingWorker(null);
+      }
+      loadKaryakartas();
+      refreshAll();
+    } catch (err) {
+      showToast(err.message || 'Error deleting karyakarta', 'error');
+    }
+  };
+
   const handleAddWorker = async (e) => {
     e.preventDefault();
     if (!workerName || !workerEmail) {
@@ -527,6 +559,15 @@ export const DonorsAndWorkersView = () => {
                         title="कार्यकर्ता माहिती बदला (Admin only)"
                       >
                         <Edit3 size={15} />
+                      </button>
+                    )}
+                    {user?.role === 'Admin' && k._id !== user?._id && (
+                      <button
+                        onClick={() => handleDeleteWorker(k)}
+                        className="p-2 rounded-xl bg-[#29171b] border border-[#482025] text-red-400 hover:bg-[#3d1c21] hover:text-red-300 transition"
+                        title="कार्यकर्ता खाते हटवा (Admin only)"
+                      >
+                        <Trash2 size={15} />
                       </button>
                     )}
                   </div>
@@ -1276,6 +1317,19 @@ export const DonorsAndWorkersView = () => {
                   <Share2 size={14} />
                   WhatsApp वर लॉगिन लिंक व माहिती पाठवा
                 </button>
+              )}
+
+              {user?.role === 'Admin' && editingWorker._id !== user?._id && (
+                <div className="pt-2 border-t border-[#242731]">
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteWorker(editingWorker)}
+                    className="w-full py-2.5 rounded-xl bg-[#29171b] border border-[#482025] text-red-400 text-xs font-bold hover:bg-[#3d1c21] hover:text-red-300 transition flex items-center justify-center gap-1.5"
+                  >
+                    <Trash2 size={14} />
+                    <span>कार्यकर्ता खाते कायमचे हटवा (Delete User)</span>
+                  </button>
+                </div>
               )}
             </form>
           </div>
