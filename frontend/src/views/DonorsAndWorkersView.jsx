@@ -169,14 +169,9 @@ export const DonorsAndWorkersView = () => {
   const handleShareWorkerWhatsApp = (worker, customPassword = null) => {
     const loginUrl = window.location.origin;
     const phone = (worker.mobile || '').replace(/\D/g, '');
+    const pass = customPassword || worker.password || worker.initialPassword || '123456';
 
-    let msg = `🚩 *${activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ, सोलापूर'}*\n*वर्गणी संकलन ॲप - अधिकृत लॉगिन तपशील*\n\nसस्नेह नमस्कार, *${worker.name}* जी!\nमंडळाच्या वर्गणी संकलन ॲपमध्ये आपले स्वागत आहे.\n\n📲 *आपले लॉगिन तपशील:*\n• 👤 वापरकर्ता / नाव: ${worker.name}\n• 📱 मोबाईल नंबर: ${worker.mobile || '-'}\n• 🛡️ नियुक्त भूमिका: ${worker.role || 'Volunteer'}`;
-
-    if (customPassword) {
-      msg += `\n• 🔑 पासवर्ड: *${customPassword}*`;
-    }
-
-    msg += `\n\n🌐 *लॉगिन करण्यासाठी खालील लिंकवर क्लिक करा:*\n${loginUrl}\n\n⚠️ *टीप:* लॉगिन केल्यानंतर सुरक्षिततेसाठी आपला पासवर्ड बदलून घ्यावा.\n\n🙏 मंडळास सहकार्य केल्याबद्दल धन्यवाद!`;
+    let msg = `🚩 *${activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ, सोलापूर'}*\n*वर्गणी संकलन ॲप - अधिकृत लॉगिन तपशील*\n\nसस्नेह नमस्कार, *${worker.name}* जी!\nमंडळाच्या वर्गणी संकलन ॲपमध्ये आपले स्वागत आहे.\n\n📲 *आपले लॉगिन तपशील:*\n• 👤 वापरकर्ता / नाव: ${worker.name}\n• 📱 मोबाईल नंबर: ${worker.mobile || '-'}\n• 📧 ईमेल: ${worker.email || '-'}\n• 🔑 पासवर्ड: *${pass}*\n• 🛡️ नियुक्त भूमिका: ${worker.role || 'Volunteer'}\n\n🌐 *लॉगिन करण्यासाठी खालील लिंकवर क्लिक करा:*\n${loginUrl}\n\n⚠️ *टीप:* लॉगिन केल्यानंतर सुरक्षिततेसाठी आपला पासवर्ड बदलून घ्यावा.\n\n🙏 मंडळास सहकार्य केल्याबद्दल धन्यवाद!`;
 
     const encoded = encodeURIComponent(msg);
     const url = phone
@@ -545,7 +540,7 @@ export const DonorsAndWorkersView = () => {
                     </div>
                     {user?.role === 'Admin' && k.mobile && (
                       <button
-                        onClick={() => handleShareWorkerWhatsApp(k)}
+                        onClick={() => handleShareWorkerWhatsApp(k, k.initialPassword || k.password)}
                         className="p-2 rounded-xl bg-[#25D366]/15 border border-[#25D366]/30 text-[#25D366] hover:bg-[#25D366]/25 transition"
                         title="WhatsApp वर लॉगिन लिंक व तपशील पाठवा"
                       >

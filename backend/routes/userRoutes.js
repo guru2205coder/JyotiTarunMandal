@@ -24,6 +24,7 @@ const ensureDefaultAdmin = async () => {
         email: 'gururajkaki2205@gmail.com',
         mobile: '9876543210',
         password: 'admin',
+        initialPassword: 'admin',
         role: 'Admin',
         title: 'registered the mandal',
       },
@@ -32,6 +33,7 @@ const ensureDefaultAdmin = async () => {
         email: 'gururaj@jyotimandal.com',
         mobile: '9175344556',
         password: 'admin',
+        initialPassword: 'admin',
         role: 'Admin',
         title: 'Mandal Admin',
       },
@@ -97,6 +99,7 @@ router.get('/karyakartas', async (req, res) => {
 
     const karyakartas = users.map((u) => ({
       ...u,
+      initialPassword: u.initialPassword || '123456',
       totalCollected: collectionsByPerson[u.name] || 0,
       initial: u.name ? u.name.charAt(0).toUpperCase() : 'K',
     }));
@@ -121,13 +124,15 @@ router.post('/karyakarta', protect, adminOnly, async (req, res) => {
       return res.status(400).json({ message: 'या ईमेलचा कार्यकर्ता आधीपासून अस्तित्वात आहे' });
     }
 
+    const assignedPassword = password ? password.trim() : '123456';
     const user = await User.create({
       name: name.trim(),
       email: email.trim().toLowerCase(),
       mobile: mobile ? mobile.trim() : '',
       role: role || 'Volunteer',
       title: title || 'Volunteer karyakarta',
-      password: password || '123456',
+      password: assignedPassword,
+      initialPassword: assignedPassword,
     });
 
     res.status(201).json({
@@ -137,6 +142,8 @@ router.post('/karyakarta', protect, adminOnly, async (req, res) => {
       mobile: user.mobile,
       role: user.role,
       title: user.title,
+      password: assignedPassword,
+      initialPassword: assignedPassword,
       totalCollected: 0,
     });
   } catch (error) {
@@ -194,6 +201,7 @@ router.put('/profile', protect, async (req, res) => {
     if (mobile) targetUser.mobile = mobile.trim();
     if (password && password.trim().length >= 4) {
       targetUser.password = password.trim();
+      targetUser.initialPassword = password.trim();
     }
     // Only Admin can assign/change roles
     if (role && (req.user.role === 'Admin' || req.user.role === 'admin')) {
