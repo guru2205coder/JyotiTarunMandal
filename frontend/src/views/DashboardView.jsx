@@ -13,6 +13,8 @@ import {
   Share2,
   MessageSquare,
   BookOpen,
+  Coins,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 export const DashboardView = () => {
@@ -28,6 +30,7 @@ export const DashboardView = () => {
     setIsFestivalModalOpen,
     setCurrentTab,
     openPendingDonors,
+    openBookReport,
     showToast,
     language,
     user,
@@ -45,6 +48,7 @@ export const DashboardView = () => {
     todayCollection: 0,
     todayReceiptsCount: 0,
     totalDonors: 0,
+    totalPromised: 0,
     pendingVargani: 0,
     whoOwesList: [],
     recentReceipts: [],
@@ -157,54 +161,110 @@ export const DashboardView = () => {
         </div>
 
         {/* Progress summary banner */}
-        <div className="mt-4 pt-3 border-t border-[#13443e] text-xs text-teal-100/90 font-medium">
-          {stats.percentSpent}% of what came in has been spent
+        <div className="mt-4 pt-3 border-t border-[#13443e] flex items-center justify-between text-xs text-teal-100/90 font-medium">
+          <span>{stats.percentSpent}% of what came in has been spent</span>
+          <span className="text-[11px] text-teal-300 font-bold">
+            {stats.totalPromised > 0 ? `${Math.min(100, Math.round((stats.totalCollection / stats.totalPromised) * 100))}% देणगी जमा` : ''}
+          </span>
         </div>
 
-        {/* Total Collection & Total Expense Indicators */}
-        <div className="mt-2.5 grid grid-cols-2 gap-4">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#22C55E] flex-shrink-0" />
-            <div>
-              <span className="text-[11px] text-teal-200/80 block">Total Collection</span>
-              <span className="text-base font-bold text-white tracking-tight">
-                {formatINR(stats.totalCollection)}
-              </span>
+        {/* 3 Metric Grid: Total Donation | Total Collection | Total Expense */}
+        <div className="mt-2.5 grid grid-cols-3 gap-2 bg-[#08201d]/85 p-2.5 rounded-2xl border border-[#144a43]">
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-[#38BDF8] flex-shrink-0" />
+              <span className="text-[10px] sm:text-[11px] text-teal-200/80 font-medium truncate">Total Donation</span>
             </div>
+            <span className="text-sm sm:text-base font-bold text-white tracking-tight mt-0.5 block truncate">
+              {formatINR(stats.totalPromised)}
+            </span>
+            <span className="text-[9.5px] text-teal-300/70 block">एकूण देणगी</span>
           </div>
 
-          <div className="flex items-center gap-2 border-l border-[#13443e] pl-4">
-            <span className="w-2 h-2 rounded-full bg-[#F87171] flex-shrink-0" />
-            <div>
-              <span className="text-[11px] text-teal-200/80 block">Total Expense</span>
-              <span className="text-base font-bold text-white tracking-tight">
-                {formatINR(stats.totalExpenses)}
-              </span>
+          <div className="border-l border-[#13443e] pl-2 sm:pl-3">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-[#22C55E] flex-shrink-0" />
+              <span className="text-[10px] sm:text-[11px] text-teal-200/80 font-medium truncate">Collected</span>
             </div>
+            <span className="text-sm sm:text-base font-bold text-[#22C55E] tracking-tight mt-0.5 block truncate">
+              {formatINR(stats.totalCollection)}
+            </span>
+            <span className="text-[9.5px] text-teal-300/70 block">जमा वर्गणी</span>
+          </div>
+
+          <div className="border-l border-[#13443e] pl-2 sm:pl-3">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-[#F87171] flex-shrink-0" />
+              <span className="text-[10px] sm:text-[11px] text-teal-200/80 font-medium truncate">Expense</span>
+            </div>
+            <span className="text-sm sm:text-base font-bold text-rose-300 tracking-tight mt-0.5 block truncate">
+              {formatINR(stats.totalExpenses)}
+            </span>
+            <span className="text-[9.5px] text-teal-300/70 block">एकूण खर्च</span>
           </div>
         </div>
       </div>
 
-      {/* Today's Collection Card (Matching screenshot image-4.png) */}
-      <div
-        onClick={() => setCurrentTab('receipt')}
-        className="rounded-[24px] bg-[#16171c] border border-[#252832] p-4 flex items-center justify-between cursor-pointer hover:border-[#383d4c] transition shadow-md group"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-[#372314] text-[#FB923C] flex items-center justify-center flex-shrink-0 border border-[#52331b]">
-            <Calendar size={22} />
+      {/* 2 Key Action Metric Cards: Total Donation Amount & Today's Collection */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Card 1: Total Donation Amount Card (एकूण देणगी रक्कम) */}
+        <div
+          onClick={() => (openBookReport ? openBookReport('all') : setCurrentTab('reports'))}
+          className="rounded-[24px] bg-[#16171c] border border-[#252832] p-4 flex items-center justify-between cursor-pointer hover:border-[#2DD4BF]/50 transition shadow-md group relative overflow-hidden"
+          title="बूकनिहाय देणगी अहवाल पहा"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-[#0f2d29] text-[#2DD4BF] flex items-center justify-center flex-shrink-0 border border-[#1b5e54] group-hover:scale-105 transition">
+              <Coins size={22} />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-zinc-400 font-medium block">Total Donation</span>
+                <span className="text-[10px] text-zinc-500 font-normal">(एकूण देणगी रक्कम)</span>
+              </div>
+              <span className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                {formatINR(stats.totalPromised)}
+              </span>
+              <p className="text-[11px] text-teal-300/90 font-medium mt-0.5">
+                {stats.totalDonors} देणगीदार • {stats.totalPromised > 0 ? Math.min(100, Math.round((stats.totalCollection / stats.totalPromised) * 100)) : 0}% जमा
+              </p>
+            </div>
           </div>
-          <div>
-            <span className="text-xs text-zinc-400 font-medium block">Today's Collection</span>
-            <span className="text-xl font-extrabold text-[#FEEA85] tracking-tight">
-              {formatINR(stats.todayCollection)}
-            </span>
+
+          <div className="flex items-center gap-1 text-xs text-zinc-400 group-hover:text-[#2DD4BF] font-medium shrink-0">
+            <span className="hidden xs:inline">बूक अहवाल</span>
+            <ChevronRight size={16} />
           </div>
         </div>
 
-        <div className="flex items-center gap-1 text-xs text-zinc-400 group-hover:text-zinc-200 font-medium">
-          <span>{stats.todayReceiptsCount} receipts</span>
-          <ChevronRight size={16} />
+        {/* Card 2: Today's Collection Card (आजचे संकलन) */}
+        <div
+          onClick={() => setCurrentTab('receipt')}
+          className="rounded-[24px] bg-[#16171c] border border-[#252832] p-4 flex items-center justify-between cursor-pointer hover:border-[#FB923C]/50 transition shadow-md group"
+          title="आजच्या सर्व पावत्या पहा"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-[#372314] text-[#FB923C] flex items-center justify-center flex-shrink-0 border border-[#52331b] group-hover:scale-105 transition">
+              <Calendar size={22} />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-zinc-400 font-medium block">Today's Collection</span>
+                <span className="text-[10px] text-zinc-500 font-normal">(आजचे संकलन)</span>
+              </div>
+              <span className="text-xl sm:text-2xl font-black text-[#FEEA85] tracking-tight">
+                {formatINR(stats.todayCollection)}
+              </span>
+              <p className="text-[11px] text-amber-300/90 font-medium mt-0.5">
+                {stats.todayReceiptsCount} पावत्या फाडल्या
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 text-xs text-zinc-400 group-hover:text-[#FB923C] font-medium shrink-0">
+            <span className="hidden xs:inline">पावत्या</span>
+            <ChevronRight size={16} />
+          </div>
         </div>
       </div>
 

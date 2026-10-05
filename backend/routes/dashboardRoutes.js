@@ -88,9 +88,9 @@ router.get('/stats', async (req, res) => {
     const pendingDonorsList = [];
 
     donors.forEach((donor) => {
-      const promised = donor.promisedAmount || 0;
-      totalPromised += promised;
       const paid = paymentsByDonor[donor._id.toString()] || 0;
+      const promised = (donor.promisedAmount && donor.promisedAmount > 0) ? donor.promisedAmount : paid;
+      totalPromised += promised;
       const remaining = Math.max(0, promised - paid);
 
       if (promised > 0) {
