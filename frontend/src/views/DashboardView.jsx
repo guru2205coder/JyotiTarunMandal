@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { formatINR } from '../utils/marathiWords';
+import { openWhatsApp } from '../utils/whatsapp';
 import {
   Calendar,
   CheckCircle,
@@ -63,11 +64,8 @@ export const DashboardView = () => {
 
     const text = `🚩 *${activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ, सोलापूर'}*\n*${activeFestival?.name || 'नवरात्र उत्सव २०२६'}*\n\nसस्नेह नमस्कार, *${donor.name}* जी.\nमंडळाच्या उत्सवासाठी आपली ठरलेली वर्गणी रक्कम ₹${promised.toLocaleString('en-IN')} असून, यापूर्वी ₹${paid.toLocaleString('en-IN')} जमा झालेली आहे.\nअद्याप *₹${remaining.toLocaleString('en-IN')}* वर्गणी शिल्लक आहे.\n\nकृपया मंडळाच्या कार्यकर्त्यांकडे वर्गणी जमा करून सहकार्य करावे ही नम्र विनंती.\n\n🙏 मंडळास सहकार्य केल्याबद्दल धन्यवाद!`;
 
-    const encoded = encodeURIComponent(text);
-    const url = donor.mobile
-      ? `https://api.whatsapp.com/send?phone=91${donor.mobile.replace(/\D/g, '')}&text=${encoded}`
-      : `https://api.whatsapp.com/send?text=${encoded}`;
-    window.open(url, '_blank');
+    openWhatsApp(donor.mobile, text);
+    showToast(language === 'mr' ? 'व्हाट्सअ‍ॅप उघडत आहे...' : 'Opening WhatsApp...');
   };
 
   return (

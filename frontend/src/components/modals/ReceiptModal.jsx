@@ -2,7 +2,8 @@ import React, { useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../utils/api';
 import { formatINR, numberToMarathiWords } from '../../utils/marathiWords';
-import { X, Printer, Download, Share2, AlertOctagon, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { openWhatsApp } from '../../utils/whatsapp';
+import { X, Printer, Download, Share2, AlertOctagon, CheckCircle2, ShieldCheck, MessageCircle } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -29,22 +30,26 @@ export const ReceiptModal = () => {
   const donor = payment.donor || payment.donorId || {};
   const festival = payment.festival || payment.festivalId || {};
 
-  const donorName = donor.name || 'देणगीदार';
-  const mobile = donor.mobile || '';
+  const donorName = donor.name || payment.donorName || 'देणगीदार';
+  const businessName = donor.businessName || payment.businessName || '';
+  const mobile = donor.mobile || payment.donorMobile || payment.mobile || '';
   const receiptNo = payment.receiptNo;
   const installmentNo = payment.installmentNumber || 1;
   const amount = payment.amount || 0;
-  const promisedAmount = donor.promisedAmount || 0;
+  const promisedAmount = donor.promisedAmount !== undefined ? donor.promisedAmount : (payment.promisedAmount || 0);
   const previouslyPaid = payment.previouslyPaid !== undefined ? payment.previouslyPaid : 0;
   const totalPaidSoFar = payment.totalPaidSoFar !== undefined ? payment.totalPaidSoFar : (previouslyPaid + amount);
   const remaining = payment.remainingBalance !== undefined ? payment.remainingBalance : Math.max(0, promisedAmount - totalPaidSoFar);
-  const isFullyPaid = promisedAmount > 0 ? totalPaidSoFar >= promisedAmount : true;
+  const isFullyPaid = payment.isFullyPaid !== undefined ? payment.isFullyPaid : (promisedAmount > 0 ? totalPaidSoFar >= promisedAmount : true);
   const marathiWords = payment.amountInMarathiWords || numberToMarathiWords(amount);
   const paymentDate = payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString('mr-IN', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
   }) : new Date().toLocaleDateString('mr-IN');
+  const bookNo = payment.bookNo || donor.bookNo || '';
+  const paymentMethod = payment.paymentMethod || 'रोख (Cash)';
+  const collectedBy = payment.collectedBy || user?.name || 'मंडळ प्रतिनिधी';
 
   // Print Handler
   const handlePrint = () => {
@@ -81,27 +86,32 @@ export const ReceiptModal = () => {
 
   // WhatsApp Share Handler
   const handleShareWhatsApp = () => {
-    const text = `*${festival.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ'}*
+    try {
+      const remainingText = remaining === 0 ? 'निरंक (₹०)' : `₹${remaining.toLocaleString('en-IN')}`;
+      const text = `*${festival.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ'}*
 📍 ${festival.mandalAddress || 'इंदिरा नगर, सोलापूर'}
 🚩 ${festival.name || 'नवरात्र उत्सव २०२६'}
 
 📜 *अधिकृत वर्गणी पावती क्र:* ${receiptNo}
-👤 *देणगीदार:* ${donorName} ${businessName ? `(${businessName})` : ''}
+👤 *देणगीदार:* ${donorName}${businessName ? ` (${businessName})` : ''}
 💰 *जमा रक्कम:* ₹${amount.toLocaleString('en-IN')}
 ✍️ *अक्षरी:* ${marathiWords}
-🔢 *हप्ता क्र:* ${installmentNo}
+🔢 *हप्ता क्र:* ${installmentNo}${bookNo ? `\n📖 *वही क्र:* ${bookNo}` : ''}
 📊 *ठरलेली वर्गणी:* ₹${promisedAmount.toLocaleString('en-IN')}
 ✅ *एकूण जमा:* ₹${totalPaidSoFar.toLocaleString('en-IN')}
-⏳ *शिल्लक रक्कम:* ₹${remaining.toLocaleString('en-IN')} ${isFullyPaid ? '(पूर्ण भरणा ✅)' : ''}
-💳 *पद्धत:* ${payment.paymentMethod || 'Cash'}
+⏳ *शिल्लक रक्कम:* ${remainingText} ${isFullyPaid ? '(पूर्ण भरणा ✅)' : ''}
+💳 *पद्धत:* ${paymentMethod}
 📅 *दिनांक:* ${paymentDate}
+✍️ *पावती देणारा:* ${collectedBy}
+
 🙏 *मंडळास सहकार्य केल्याबद्दल मनःपूर्वक धन्यवाद!*`;
 
-    const encoded = encodeURIComponent(text);
-    const url = mobile
-      ? `https://api.whatsapp.com/send?phone=91${mobile.replace(/\D/g, '')}&text=${encoded}`
-      : `https://api.whatsapp.com/send?text=${encoded}`;
-    window.open(url, '_blank');
+      openWhatsApp(mobile, text);
+      showToast(language === 'mr' ? 'व्हाट्सअ‍ॅपवर पावती पाठवली जात आहे...' : 'Opening WhatsApp to share receipt...');
+    } catch (err) {
+      console.error('WhatsApp share error:', err);
+      showToast('WhatsApp शेअर करताना त्रुटी आली', 'error');
+    }
   };
 
   // Reversal / Correction Handler

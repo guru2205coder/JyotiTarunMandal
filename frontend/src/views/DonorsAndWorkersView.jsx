@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../utils/api';
 import { formatINR } from '../utils/marathiWords';
+import { openWhatsApp } from '../utils/whatsapp';
 import confetti from 'canvas-confetti';
 import {
   Users,
@@ -181,12 +182,7 @@ export const DonorsAndWorkersView = () => {
 
     let msg = `🚩 *${activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ, सोलापूर'}*\n*वर्गणी संकलन ॲप - अधिकृत लॉगिन तपशील*\n\nसस्नेह नमस्कार, *${worker.name}* जी!\nमंडळाच्या वर्गणी संकलन ॲपमध्ये आपले स्वागत आहे.\n\n📲 *आपले लॉगिन तपशील:*\n• 👤 वापरकर्ता / नाव: ${worker.name}\n• 📱 मोबाईल नंबर: ${worker.mobile || '-'}\n• 📧 ईमेल: ${worker.email || '-'}\n• 🔑 पासवर्ड: *${pass}*\n• 🛡️ नियुक्त भूमिका: ${worker.role || 'Volunteer'}\n\n🌐 *लॉगिन करण्यासाठी खालील लिंकवर क्लिक करा:*\n${loginUrl}\n\n⚠️ *टीप:* लॉगिन केल्यानंतर सुरक्षिततेसाठी आपला पासवर्ड बदलून घ्यावा.\n\n🙏 मंडळास सहकार्य केल्याबद्दल धन्यवाद!`;
 
-    const encoded = encodeURIComponent(msg);
-    const url = phone
-      ? `https://api.whatsapp.com/send?phone=91${phone}&text=${encoded}`
-      : `https://api.whatsapp.com/send?text=${encoded}`;
-
-    window.open(url, '_blank');
+    openWhatsApp(worker.mobile, msg);
   };
 
   const openEditWorker = (k) => {
@@ -309,11 +305,7 @@ export const DonorsAndWorkersView = () => {
 
     const text = `🚩 *${activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ, सोलापूर'}*\n*${activeFestival?.name || 'नवरात्र उत्सव २०२६'}*\n\nसस्नेह नमस्कार, *${donor.name}* जी.\nमंडळाच्या उत्सवासाठी आपली ठरलेली वर्गणी रक्कम ₹${promised.toLocaleString('en-IN')} असून, यापूर्वी ₹${paid.toLocaleString('en-IN')} जमा झालेली आहे.\nअद्याप *₹${remaining.toLocaleString('en-IN')}* वर्गणी शिल्लक आहे.\n\nकृपया मंडळाच्या कार्यकर्त्यांकडे उर्वरित वर्गणी जमा करून डिजिटल पावती प्राप्त करून घ्यावी ही नम्र विनंती.\n\n🙏 मंडळास सहकार्य केल्याबद्दल धन्यवाद!`;
 
-    const encoded = encodeURIComponent(text);
-    const url = donor.mobile
-      ? `https://api.whatsapp.com/send?phone=91${donor.mobile.replace(/\D/g, '')}&text=${encoded}`
-      : `https://api.whatsapp.com/send?text=${encoded}`;
-    window.open(url, '_blank');
+    openWhatsApp(donor.mobile, text);
   };
 
   const handleDeleteDonor = async (donor) => {

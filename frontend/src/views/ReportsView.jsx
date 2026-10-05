@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../utils/api';
 import { formatINR } from '../utils/marathiWords';
+import { openWhatsApp } from '../utils/whatsapp';
 import {
   BarChart3,
   Download,
@@ -233,8 +234,7 @@ export const ReportsView = () => {
 
     const text = `🚩 *${activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ, सोलापूर'}*\n📍 ${activeFestival?.mandalAddress || 'इंदिरा नगर, सोलापूर'}\n📜 *अधिकृत वार्षिक जमा-खर्च ताळेबंद - ${activeFestival?.name || 'नवरात्र उत्सव २०२६'}*\n\n📥 *एकूण जमा (Income):*\n  • मागील वर्षाची शिल्लक: ₹${(summary?.openingBalance || 0).toLocaleString('en-IN')}\n  • वर्गणी संकलन: ₹${(summary?.totalVargani || 0).toLocaleString('en-IN')} (${summary?.receiptCount || 0} पावत्या)\n  *👉 एकूण जमा रक्कम: ₹${totalInc.toLocaleString('en-IN')}*\n\n📤 *एकूण खर्च (Expenses):*\n${expenseLines || '  • तपशील लेजरमध्ये नोंदवला आहे'}\n  *👉 एकूण खर्च रक्कम: ₹${totalExp.toLocaleString('en-IN')}*\n\n═══════════════════\n💰 *अंतिम शिल्लक रक्कम: ₹${balance.toLocaleString('en-IN')}*\n═══════════════════\n\n🙏 *मंडळाच्या सर्व देणगीदारांचे, कार्यकर्त्यांचे व नागरिकांचे मनःपूर्वक आभार!*`;
 
-    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
+    openWhatsApp('', text);
   };
 
   const handleSendReminder = (donor) => {
@@ -244,11 +244,7 @@ export const ReportsView = () => {
 
     const text = `🚩 *${activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ, सोलापूर'}*\n*${activeFestival?.name || 'नवरात्र उत्सव २०२६'}*\n\nसस्नेह नमस्कार, *${donor.name}* जी.\nमंडळाच्या उत्सवासाठी आपली ठरलेली वर्गणी रक्कम ₹${promised.toLocaleString('en-IN')} असून, यापूर्वी ₹${paid.toLocaleString('en-IN')} जमा झालेली आहे.\nअद्याप *₹${remaining.toLocaleString('en-IN')}* वर्गणी शिल्लक आहे.\n\nकृपया मंडळाच्या कार्यकर्त्यांकडे उर्वरित वर्गणी जमा करून डिजिटल पावती प्राप्त करून घ्यावी ही नम्र विनंती.\n\n🙏 मंडळास सहकार्य केल्याबद्दल धन्यवाद!`;
 
-    const encoded = encodeURIComponent(text);
-    const url = donor.mobile
-      ? `https://api.whatsapp.com/send?phone=91${donor.mobile.replace(/\D/g, '')}&text=${encoded}`
-      : `https://api.whatsapp.com/send?text=${encoded}`;
-    window.open(url, '_blank');
+    openWhatsApp(donor.mobile, text);
   };
 
   const normalizeBook = (b) => (b || '').replace(/[^0-9]/g, '') || (b || '').trim().toLowerCase();
@@ -402,8 +398,7 @@ export const ReportsView = () => {
 
     const text = `🚩 *${title}*\n📖 *${cleanBookLabel} वर्गणी अहवाल*\n\n📊 *एकूण सारांश:*\n• एकूण देणगीदार: ${bookDonorsList.length}\n• ठरलेली वर्गणी: ₹${bookReportTotals.promised.toLocaleString('en-IN')}\n• एकूण जमा: ₹${bookReportTotals.paid.toLocaleString('en-IN')}\n• एकूण येणे (बाकी): ₹${bookReportTotals.remaining.toLocaleString('en-IN')}\n• वसुली: ${bookReportTotals.percent}%\n\n📋 *देणगीदार यादी:*\n${lines}${bookDonorsList.length > 35 ? `\n...आणि इतर ${bookDonorsList.length - 35} देणगीदार` : ''}\n\n🙏 मंडळास सहकार्य केल्याबद्दल धन्यवाद!`;
 
-    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
+    openWhatsApp('', text);
   };
 
   // In-memory active book calculations for instant 0ms category switching
@@ -573,8 +568,7 @@ export const ReportsView = () => {
 
     const text = `🚩 *${activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ, सोलापूर'}*\n*${activeFestival?.name || 'नवरात्र उत्सव २०२६'}*\n\n📋 *वहीनिहाय बाकी वर्गणीदार सारांश (Pending Vargani Summary)*\n\n${lines}\n═══════════════════\n💰 *एकूण बाकी वर्गणी: ₹${(pendingData.overall?.totalPendingAmount || 0).toLocaleString('en-IN')}*\n👥 *एकूण थकबाकीदार: ${pendingData.overall?.count || 0}*\n═══════════════════\n\n📌 सर्व कार्यकर्त्यांनी आपापल्या वहीनुसार राहिलेली वर्गणी जमा करावी ही नम्र विनंती!`;
 
-    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
+    openWhatsApp('', text);
   };
 
   return (
