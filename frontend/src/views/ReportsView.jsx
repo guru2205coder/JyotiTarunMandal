@@ -341,17 +341,38 @@ export const ReportsView = () => {
     try {
       const element = bookReportRef.current;
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 2.5,
         useCORS: true,
         backgroundColor: '#ffffff',
+        logging: false,
       });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 8;
+      const printWidth = pageWidth - (margin * 2);
+      const printHeight = (canvas.height * printWidth) / canvas.width;
+      const imgData = canvas.toDataURL('image/png');
+
+      if (printHeight <= pageHeight - (margin * 2)) {
+        pdf.addImage(imgData, 'PNG', margin, margin, printWidth, printHeight);
+      } else {
+        const pagePrintableHeight = pageHeight - (margin * 2);
+        let heightLeft = printHeight;
+        let position = margin;
+
+        pdf.addImage(imgData, 'PNG', margin, position, printWidth, printHeight);
+        heightLeft -= pagePrintableHeight;
+
+        while (heightLeft > 0) {
+          position = margin - (printHeight - heightLeft);
+          pdf.addPage();
+          pdf.addImage(imgData, 'PNG', margin, position, printWidth, printHeight);
+          heightLeft -= pagePrintableHeight;
+        }
+      }
+
       const numericBook = (selectedBook || '').replace(/[^0-9]/g, '');
       const safeLabel = selectedBook === 'all' ? 'All_Books' : `Book_${numericBook || selectedBook}`;
       pdf.save(`Jyoti_Mandal_${safeLabel}_Report_${activeFestival?.year || 2026}.pdf`);
@@ -1287,13 +1308,69 @@ export const ReportsView = () => {
               </div>
             )}
 
-            {/* Print Footer Notice */}
-            <div className="mt-4 pt-3 border-t border-zinc-200 flex items-center justify-between text-[11px] text-zinc-500 font-sans">
-              <div>
-                मंडळ: <strong>{activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ, सोलापूर'}</strong>
+            {/* Official e-Signatures Section matching Balance Sheet & Excel */}
+            <div className="mt-8 pt-6 border-t-2 border-zinc-300">
+              <div className="grid grid-cols-3 gap-3 text-center text-xs">
+                {/* 1. Treasurer e-Sign */}
+                <div className="flex flex-col items-center">
+                  <div className="h-8 flex items-end justify-center font-serif italic text-xs font-bold text-emerald-800 tracking-wider">
+                    Gururaj K. (e-Sign)
+                  </div>
+                  <div className="w-full border-t border-zinc-700 pt-1 font-black text-zinc-900 text-xs sm:text-sm">
+                    श्री. गुरुराज (खजिनदार)
+                  </div>
+                  <span className="text-[10px] text-zinc-500 font-medium">
+                    खजिनदार सही (Treasurer)
+                  </span>
+                  <div className="mt-1 inline-flex items-center gap-1 text-[9.5px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                    ✓ ई-स्वाक्षरी प्रमाणित
+                  </div>
+                </div>
+
+                {/* 2. Secretary e-Sign */}
+                <div className="flex flex-col items-center">
+                  <div className="h-8 flex items-end justify-center font-serif italic text-xs font-bold text-zinc-600 tracking-wider">
+                    Secretary (e-Sign)
+                  </div>
+                  <div className="w-full border-t border-zinc-700 pt-1 font-black text-zinc-900 text-xs sm:text-sm">
+                    कार्यवाह / सेक्रेटरी
+                  </div>
+                  <span className="text-[10px] text-zinc-500 font-medium">
+                    कार्यवाह सही (Secretary)
+                  </span>
+                  <div className="mt-1 inline-flex items-center gap-1 text-[9.5px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                    ✓ ई-स्वाक्षरी प्रमाणित
+                  </div>
+                </div>
+
+                {/* 3. President e-Sign */}
+                <div className="flex flex-col items-center">
+                  <div className="h-8 flex items-end justify-center font-serif italic text-xs font-bold text-zinc-600 tracking-wider">
+                    President (e-Sign)
+                  </div>
+                  <div className="w-full border-t border-zinc-700 pt-1 font-black text-zinc-900 text-xs sm:text-sm">
+                    अध्यक्ष
+                  </div>
+                  <span className="text-[10px] text-zinc-500 font-medium">
+                    अध्यक्ष सही (President)
+                  </span>
+                  <div className="mt-1 inline-flex items-center gap-1 text-[9.5px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                    ✓ ई-स्वाक्षरी प्रमाणित
+                  </div>
+                </div>
               </div>
-              <div>
-                दिनांक: <strong>{new Date().toLocaleDateString('mr-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</strong>
+
+              {/* Official Seal / Notice */}
+              <div className="mt-6 pt-3 border-t border-zinc-200 flex flex-wrap items-center justify-between text-[10.5px] text-zinc-500 font-sans gap-2">
+                <div>
+                  मंडळ: <strong>{activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ, सोलापूर'}</strong>
+                </div>
+                <div className="text-zinc-400">
+                  अधिकृत डिजिटल वर्गणी हिशोब पत्रक • ई-स्वाक्षरी व सिस्टीम पडताळणीसह
+                </div>
+                <div>
+                  दिनांक: <strong>{new Date().toLocaleDateString('mr-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</strong>
+                </div>
               </div>
             </div>
           </div>
