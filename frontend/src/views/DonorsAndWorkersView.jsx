@@ -31,6 +31,7 @@ import {
   RefreshCw,
   FileSpreadsheet,
 } from 'lucide-react';
+import { exportBookWiseExcel } from '../utils/excelExport';
 
 export const DonorsAndWorkersView = () => {
   const {
@@ -43,6 +44,7 @@ export const DonorsAndWorkersView = () => {
     user,
     setUser,
     refreshAll,
+    openBookReport,
   } = useApp();
 
   const isAdmin =
@@ -378,7 +380,21 @@ export const DonorsAndWorkersView = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast(`देणगीदार तपशील (${selectedBookFilter !== 'all' ? selectedBookFilter : 'सर्व वह्या'}) Excel डाऊनलोड झाली!`);
+    showToast(`देणगीदार तपशील (${selectedBookFilter !== 'all' ? selectedBookFilter : 'सर्व वह्या'}) CSV डाऊनलोड झाली!`);
+  };
+
+  const handleExportDonorsExcel = () => {
+    if (!donors || donors.length === 0) {
+      showToast('कोणताही डेटा उपलब्ध नाही', 'error');
+      return;
+    }
+    exportBookWiseExcel({
+      mandalName: activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ',
+      bookNo: selectedBookFilter,
+      donors: donors,
+      festivalYear: activeFestival?.year || 2026,
+    });
+    showToast(`देणगीदार तपशील (${selectedBookFilter !== 'all' ? selectedBookFilter : 'सर्व वह्या'}) Excel (.xlsx) डाऊनलोड झाली!`);
   };
 
   const handleQuickPayFull = async (donor) => {
@@ -793,16 +809,26 @@ export const DonorsAndWorkersView = () => {
               ))}
             </div>
 
-            {/* Quick Excel Export */}
+            {/* Quick Excel Export & Book Report link */}
             {(user?.role === 'Admin' || user?.role === 'Treasurer') && (
-              <button
-                onClick={handleExportDonorsCSV}
-                className="px-2.5 py-1 rounded-xl bg-[#1c1f26] border border-[#2b2f3a] text-[#2DD4BF] text-xs font-bold flex items-center gap-1 hover:bg-[#252833] transition whitespace-nowrap shrink-0 shadow-sm"
-                title="Excel (CSV) Download"
-              >
-                <FileSpreadsheet size={13} />
-                <span>Excel (CSV)</span>
-              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={handleExportDonorsExcel}
+                  className="px-2.5 py-1 rounded-xl bg-[#143323] border border-[#1b4e33] text-[#22C55E] text-xs font-bold flex items-center gap-1 hover:bg-[#1a442e] transition whitespace-nowrap shadow-sm"
+                  title="Excel (.xlsx) फाईल डाऊनलोड करा"
+                >
+                  <FileSpreadsheet size={13} />
+                  <span>Excel (.xlsx)</span>
+                </button>
+                <button
+                  onClick={() => openBookReport(selectedBookFilter)}
+                  className="px-2.5 py-1 rounded-xl bg-[#599E39] text-white text-xs font-bold flex items-center gap-1 hover:bg-[#4d8b31] transition whitespace-nowrap shadow-sm"
+                  title="बूकनिहाय अहवाल पत्रक पहा"
+                >
+                  <BookOpen size={12} />
+                  <span>बूक अहवाल पत्रक</span>
+                </button>
+              </div>
             )}
           </div>
 

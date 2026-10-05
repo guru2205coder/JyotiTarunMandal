@@ -22,6 +22,12 @@ export const AppProvider = ({ children }) => {
     setCurrentTab('reports');
   };
 
+  const openBookReport = (bookNo = '1') => {
+    setSelectedReportBook(bookNo);
+    setReportSubTab('book');
+    setCurrentTab('reports');
+  };
+
   // Modals state
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [selectedDonorForPayment, setSelectedDonorForPayment] = useState(null);
@@ -194,6 +200,7 @@ export const AppProvider = ({ children }) => {
         selectedReportBook,
         setSelectedReportBook,
         openPendingDonors,
+        openBookReport,
         user,
         setUser,
         token,

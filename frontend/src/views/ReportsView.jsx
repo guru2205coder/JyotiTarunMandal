@@ -29,6 +29,7 @@ import {
 import jsPDF from 'jspdf';
 
 import html2canvas from 'html2canvas';
+import { exportBookWiseExcel, exportBookWiseCSV } from '../utils/excelExport';
 
 export const ReportsView = () => {
   const {
@@ -64,8 +65,10 @@ export const ReportsView = () => {
   const [pendingSearch, setPendingSearch] = useState('');
   const [collapsedBooks, setCollapsedBooks] = useState({});
   const [downloadingSheet, setDownloadingSheet] = useState(false);
+  const [bookReportSearch, setBookReportSearch] = useState('');
 
   const balanceSheetRef = useRef();
+  const bookReportRef = useRef();
 
   useEffect(() => {
     if (selectedReportBook) {
@@ -245,6 +248,140 @@ export const ReportsView = () => {
     const url = donor.mobile
       ? `https://api.whatsapp.com/send?phone=91${donor.mobile.replace(/\D/g, '')}&text=${encoded}`
       : `https://api.whatsapp.com/send?text=${encoded}`;
+    window.open(url, '_blank');
+  };
+
+  const normalizeBook = (b) => (b || '').replace(/[^0-9]/g, '') || (b || '').trim().toLowerCase();
+
+  const getBookDisplayTitle = (bNo) => {
+    if (!bNo || bNo === 'all') return 'सर्व वह्या वर्गणी अहवाल';
+    const num = (bNo || '').replace(/[^0-9]/g, '');
+    return num ? `बूक न. ${num} वर्गणी` : `बूक ${bNo} वर्गणी`;
+  };
+
+  // Filter donors for the active book report
+  const bookDonorsList = React.useMemo(() => {
+    let list = donorLedger;
+    if (selectedBook !== 'all') {
+      const targetNorm = normalizeBook(selectedBook);
+      list = list.filter((d) => {
+        const dNorm = normalizeBook(d.bookNo);
+        return dNorm === targetNorm || (d.bookNo || '').trim().toLowerCase() === selectedBook.trim().toLowerCase();
+      });
+    }
+    if (bookReportSearch.trim()) {
+      const q = bookReportSearch.toLowerCase().trim();
+      list = list.filter((d) => {
+        const matchName = d.name && d.name.toLowerCase().includes(q);
+        const matchBusiness = d.businessName && d.businessName.toLowerCase().includes(q);
+        const matchMobile = d.mobile && d.mobile.includes(q);
+        return matchName || matchBusiness || matchMobile;
+      });
+    }
+    return list;
+  }, [donorLedger, selectedBook, bookReportSearch]);
+
+  const bookReportTotals = React.useMemo(() => {
+    let promised = 0;
+    let paid = 0;
+    let remaining = 0;
+
+    bookDonorsList.forEach((d) => {
+      const p = Number(d.promisedAmount || d.totalPaid || 0);
+      const pd = Number(d.totalPaid || 0);
+      const rem = Math.max(0, p - pd);
+      promised += p;
+      paid += pd;
+      remaining += rem;
+    });
+
+    const percent = promised > 0 ? Math.min(100, Math.round((paid / promised) * 100)) : 100;
+    return { promised, paid, remaining, percent, count: bookDonorsList.length };
+  }, [bookDonorsList]);
+
+  const handleExportBookExcelAction = () => {
+    if (!canExportReports) {
+      showToast('अहवाल डाऊनलोड करण्याचे अधिकार केवळ ॲडमिन व खजिनदारांसाठी आहेत', 'error');
+      return;
+    }
+    if (!bookDonorsList || bookDonorsList.length === 0) {
+      showToast('कोणताही डेटा उपलब्ध नाही', 'error');
+      return;
+    }
+    exportBookWiseExcel({
+      mandalName: activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ',
+      bookNo: selectedBook,
+      donors: bookDonorsList,
+      festivalYear: activeFestival?.year || 2026,
+    });
+    showToast(`बूक अहवाल Excel (.xlsx) डाऊनलोड झाली!`);
+  };
+
+  const handleExportBookCSVAction = () => {
+    if (!canExportReports) {
+      showToast('अहवाल डाऊनलोड करण्याचे अधिकार केवळ ॲडमिन व खजिनदारांसाठी आहेत', 'error');
+      return;
+    }
+    if (!bookDonorsList || bookDonorsList.length === 0) {
+      showToast('कोणताही डेटा उपलब्ध नाही', 'error');
+      return;
+    }
+    exportBookWiseCSV({
+      mandalName: activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ',
+      bookNo: selectedBook,
+      donors: bookDonorsList,
+      festivalYear: activeFestival?.year || 2026,
+    });
+    showToast(`बूक अहवाल CSV डाऊनलोड झाली!`);
+  };
+
+  const handleDownloadBookReportPDF = async () => {
+    if (!bookReportRef.current) return;
+    setDownloadingSheet(true);
+    try {
+      const element = bookReportRef.current;
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      const numericBook = (selectedBook || '').replace(/[^0-9]/g, '');
+      const safeLabel = selectedBook === 'all' ? 'All_Books' : `Book_${numericBook || selectedBook}`;
+      pdf.save(`Jyoti_Mandal_${safeLabel}_Report_${activeFestival?.year || 2026}.pdf`);
+      showToast('बूक अहवाल PDF डाऊनलोड झाली!');
+    } catch (err) {
+      console.error(err);
+      showToast('PDF तयार करताना त्रुटी आली', 'error');
+    } finally {
+      setDownloadingSheet(false);
+    }
+  };
+
+  const handleShareBookReportWhatsApp = () => {
+    const numericBook = (selectedBook || '').replace(/[^0-9]/g, '');
+    const cleanBookLabel = selectedBook === 'all' ? 'सर्व वह्या एकत्र' : (numericBook ? `बूक न. ${numericBook}` : `बूक ${selectedBook}`);
+    const title = activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ, सोलापूर';
+
+    let lines = '';
+    const sample = bookDonorsList.slice(0, 35);
+    sample.forEach((d, idx) => {
+      const promised = Number(d.promisedAmount || d.totalPaid || 0);
+      const paid = Number(d.totalPaid || 0);
+      const remaining = Math.max(0, promised - paid);
+      const statusIcon = remaining === 0 ? '✅ जमा' : (paid > 0 ? '⚠️ अपूर्ण' : '❌ बाकी');
+      lines += `${idx + 1}. ${d.name}: ठरलेली ₹${promised.toLocaleString('en-IN')} | जमा ₹${paid.toLocaleString('en-IN')} | येणे ₹${remaining.toLocaleString('en-IN')} [${statusIcon}]\n`;
+    });
+
+    const text = `🚩 *${title}*\n📖 *${cleanBookLabel} वर्गणी अहवाल*\n\n📊 *एकूण सारांश:*\n• एकूण देणगीदार: ${bookDonorsList.length}\n• ठरलेली वर्गणी: ₹${bookReportTotals.promised.toLocaleString('en-IN')}\n• एकूण जमा: ₹${bookReportTotals.paid.toLocaleString('en-IN')}\n• एकूण येणे (बाकी): ₹${bookReportTotals.remaining.toLocaleString('en-IN')}\n• वसुली: ${bookReportTotals.percent}%\n\n📋 *देणगीदार यादी:*\n${lines}${bookDonorsList.length > 35 ? `\n...आणि इतर ${bookDonorsList.length - 35} देणगीदार` : ''}\n\n🙏 मंडळास सहकार्य केल्याबद्दल धन्यवाद!`;
+
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
   };
 
@@ -431,14 +568,36 @@ export const ReportsView = () => {
         </div>
         <div className="flex gap-2">
           {canExportReports && (
-            <button
-              onClick={reportSubTab === 'pending' ? handleExportPendingCSV : handleExportCSV}
-              className="px-3 py-1.5 rounded-xl bg-[#1c1f26] border border-[#2b2f3a] text-[#2DD4BF] text-xs font-bold flex items-center gap-1.5 hover:bg-[#252833] transition"
-              title="Export CSV"
-            >
-              <FileSpreadsheet size={15} />
-              <span>Excel (CSV)</span>
-            </button>
+            <>
+              {reportSubTab === 'book' ? (
+                <>
+                  <button
+                    onClick={handleExportBookExcelAction}
+                    className="px-3 py-1.5 rounded-xl bg-[#143323] border border-[#1b4e33] text-[#22C55E] text-xs font-bold flex items-center gap-1.5 hover:bg-[#1a442e] transition shadow-sm"
+                    title="Excel (.xlsx) डाउनलोड"
+                  >
+                    <FileSpreadsheet size={15} />
+                    <span>Excel (.xlsx)</span>
+                  </button>
+                  <button
+                    onClick={handleExportBookCSVAction}
+                    className="px-2.5 py-1.5 rounded-xl bg-[#1c1f26] border border-[#2b2f3a] text-[#2DD4BF] text-xs font-bold flex items-center gap-1 hover:bg-[#252833] transition"
+                    title="CSV डाउनलोड"
+                  >
+                    <span>CSV</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={reportSubTab === 'pending' ? handleExportPendingCSV : handleExportCSV}
+                  className="px-3 py-1.5 rounded-xl bg-[#1c1f26] border border-[#2b2f3a] text-[#2DD4BF] text-xs font-bold flex items-center gap-1.5 hover:bg-[#252833] transition"
+                  title="Export CSV"
+                >
+                  <FileSpreadsheet size={15} />
+                  <span>Excel (CSV)</span>
+                </button>
+              )}
+            </>
           )}
           <button
             onClick={() => window.print()}
@@ -504,8 +663,8 @@ export const ReportsView = () => {
         </div>
       </div>
 
-      {/* Sub-Tabs: Overview | Pending Donors by Book | Official Balance Sheet | Donor Ledger */}
-      <div className="grid grid-cols-4 bg-[#16171c] p-1 rounded-2xl border border-[#262932] gap-1">
+      {/* Sub-Tabs: Overview | Book Report | Pending Donors | Official Balance Sheet | Donor Ledger */}
+      <div className="grid grid-cols-5 bg-[#16171c] p-1 rounded-2xl border border-[#262932] gap-1">
         <button
           onClick={() => setReportSubTab('overview')}
           className={`py-2 px-1 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${
@@ -516,6 +675,18 @@ export const ReportsView = () => {
         >
           <BarChart3 size={13} />
           <span className="truncate">वित्तीय सारांश</span>
+        </button>
+        <button
+          onClick={() => setReportSubTab('book')}
+          className={`py-2 px-1 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${
+            reportSubTab === 'book'
+              ? 'bg-[#599E39] text-white shadow-md font-black'
+              : 'text-zinc-400 hover:text-white'
+          }`}
+          title="बूकनिहाय वर्गणी अहवाल (Book-wise Report)"
+        >
+          <FileSpreadsheet size={13} className={reportSubTab === 'book' ? 'text-white' : 'text-[#60993E]'} />
+          <span className="truncate">बूक अहवाल</span>
         </button>
         <button
           onClick={() => setReportSubTab('pending')}
@@ -714,10 +885,13 @@ export const ReportsView = () => {
                         </div>
 
                         <button
-                          onClick={() => setSelectedBook(b.bookNo)}
-                          className="px-2.5 py-1 rounded-xl bg-[#1e2330] hover:bg-[#282f42] text-[#2DD4BF] text-[11px] font-bold flex items-center gap-1 transition"
+                          onClick={() => {
+                            handleSelectBook(b.bookNo);
+                            setReportSubTab('book');
+                          }}
+                          className="px-2.5 py-1 rounded-xl bg-[#143323] hover:bg-[#1a442e] border border-[#1b4e33] text-[#22C55E] text-[11px] font-bold flex items-center gap-1 transition"
                         >
-                          <span>अहवाल पहा</span>
+                          <span>बूक अहवाल पहा</span>
                           <ArrowRight size={11} />
                         </button>
                       </div>
@@ -820,6 +994,309 @@ export const ReportsView = () => {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB: BOOK-WISE REPORT (बूकनिहाय वर्गणी अहवाल - EXACT FORMAT AS REQUESTED) */}
+      {reportSubTab === 'book' && (
+        <div className="space-y-4">
+          {/* Action Toolbar & Book Selector */}
+          <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-[#16181d] border border-[#262932] rounded-2xl">
+            <div className="flex items-center gap-2">
+              <span className="w-8 h-8 rounded-xl bg-[#143323] text-[#22C55E] flex items-center justify-center border border-[#1b4e33]">
+                <FileSpreadsheet size={16} />
+              </span>
+              <div>
+                <h3 className="font-extrabold text-sm text-zinc-100 flex items-center gap-1.5">
+                  <span>{getBookDisplayTitle(selectedBook)}</span>
+                  <span className="text-[11px] text-zinc-400 font-normal">
+                    ({bookDonorsList.length} देणगीदार)
+                  </span>
+                </h3>
+                <p className="text-[11px] text-zinc-400">
+                  ठरलेली: {formatINR(bookReportTotals.promised)} • जमा: <span className="text-emerald-400 font-semibold">{formatINR(bookReportTotals.paid)}</span> • बाकी: <span className="text-amber-400 font-semibold">{formatINR(bookReportTotals.remaining)}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Export & Share Action Buttons */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {canExportReports && (
+                <>
+                  <button
+                    onClick={handleExportBookExcelAction}
+                    className="px-3 py-1.5 rounded-xl bg-[#599E39] hover:bg-[#4d8b31] text-white text-xs font-bold flex items-center gap-1.5 transition shadow-md"
+                    title="Excel (.xlsx) फाईल डाऊनलोड करा"
+                  >
+                    <FileSpreadsheet size={14} />
+                    <span>Excel (.xlsx)</span>
+                  </button>
+                  <button
+                    onClick={handleExportBookCSVAction}
+                    className="px-2.5 py-1.5 rounded-xl bg-[#1c1f26] hover:bg-[#252833] border border-[#2b2f3a] text-[#2DD4BF] text-xs font-bold flex items-center gap-1 transition"
+                    title="CSV फाईल डाऊनलोड करा"
+                  >
+                    <span>CSV</span>
+                  </button>
+                  <button
+                    onClick={handleDownloadBookReportPDF}
+                    disabled={downloadingSheet}
+                    className="px-2.5 py-1.5 rounded-xl bg-[#FF5A1F] hover:bg-[#E04C00] text-white text-xs font-bold flex items-center gap-1 transition disabled:opacity-50"
+                    title="PDF डाऊनलोड करा"
+                  >
+                    <Download size={14} />
+                    <span>{downloadingSheet ? '...' : 'PDF'}</span>
+                  </button>
+                </>
+              )}
+              <button
+                onClick={handleShareBookReportWhatsApp}
+                className="px-2.5 py-1.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-zinc-950 text-xs font-bold flex items-center gap-1 transition"
+                title="WhatsApp वर अहवाल शेअर करा"
+              >
+                <Share2 size={13} />
+                <span className="hidden sm:inline">WhatsApp</span>
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="p-1.5 rounded-xl bg-[#20222a] text-zinc-300 hover:text-white transition"
+                title="Print करा"
+              >
+                <Printer size={15} />
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Book Switcher Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+            <button
+              onClick={() => handleSelectBook('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition flex items-center gap-1.5 ${
+                selectedBook === 'all'
+                  ? 'bg-[#599E39] text-white shadow-md'
+                  : 'bg-[#181a20] border border-[#262933] text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Layers size={13} />
+              <span>सर्व बूक एकत्र</span>
+            </button>
+            {(bookWiseSummary?.books && bookWiseSummary.books.length > 0
+              ? bookWiseSummary.books
+              : [{ bookNo: '1', label: 'बूक न. 1' }, { bookNo: '2', label: 'बूक न. 2' }]
+            ).map((b) => {
+              const num = b.bookNo.replace(/[^0-9]/g, '') || b.bookNo;
+              const isSel = selectedBook === b.bookNo || (selectedBook !== 'all' && normalizeBook(selectedBook) === normalizeBook(b.bookNo));
+              return (
+                <button
+                  key={b.bookNo}
+                  onClick={() => handleSelectBook(b.bookNo)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition flex items-center gap-1.5 ${
+                    isSel
+                      ? 'bg-[#599E39] text-white shadow-md font-extrabold ring-1 ring-white/30'
+                      : 'bg-[#181a20] border border-[#262933] text-zinc-300 hover:text-white'
+                  }`}
+                >
+                  <BookOpen size={13} className={isSel ? 'text-white' : 'text-[#599E39]'} />
+                  <span>बूक न. {num}</span>
+                  {b.totalCollected !== undefined && (
+                    <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-mono ${isSel ? 'bg-black/20 text-white' : 'bg-[#222632] text-zinc-400'}`}>
+                      {formatINR(b.totalCollected)}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Real-time Search Box within this Book */}
+          <div className="relative">
+            <Search size={16} className="absolute left-3.5 top-3 text-zinc-400" />
+            <input
+              type="text"
+              value={bookReportSearch}
+              onChange={(e) => setBookReportSearch(e.target.value)}
+              placeholder="या बूक मधील देणगीदाराचे नाव किंवा मोबाईल शोधा..."
+              className="w-full bg-[#181a1f] border border-[#272b36] rounded-2xl pl-10 pr-10 py-2.5 text-zinc-100 text-xs sm:text-sm focus:outline-none focus:border-[#599E39]"
+            />
+            {bookReportSearch && (
+              <button
+                onClick={() => setBookReportSearch('')}
+                className="absolute right-3.5 top-3 text-zinc-400 hover:text-white text-xs"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* EXACT FORMAT FROM USER SCREENSHOT: EXCEL SPREADSHEET CARD */}
+          <div
+            id="printable-book-report"
+            ref={bookReportRef}
+            className="bg-white text-zinc-900 rounded-2xl p-4 sm:p-6 border-2 border-[#599E39]/40 shadow-xl overflow-x-auto select-none"
+            style={{ fontFamily: "'Noto Sans Devanagari', 'Inter', Arial, sans-serif" }}
+          >
+            {/* Header Line 1: Mandal Name (Devanagari, Bold, Centered) */}
+            <h1 className="text-xl sm:text-2xl font-black text-center text-zinc-950 tracking-normal font-sans">
+              {activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ'}
+            </h1>
+
+            {/* Header Line 2: Book Title e.g. "बूक न. 1 वर्गणी" (Bold, Centered) */}
+            <h2 className="text-base sm:text-lg font-extrabold text-center text-zinc-900 mt-1 pb-4">
+              {getBookDisplayTitle(selectedBook)}
+            </h2>
+
+            {/* Data Table with Green Header */}
+            {bookDonorsList.length === 0 ? (
+              <div className="py-12 text-center text-zinc-500 text-xs sm:text-sm border border-dashed border-zinc-300 rounded-xl">
+                {bookReportSearch ? 'शोधानुसार कोणतीही देणगीदार नोंद आढळली नाही' : 'या बूक मध्ये अद्याप कोणतीही देणगीदार नोंद नाही'}
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-[#599E39] rounded-lg">
+                <table className="w-full border-collapse text-xs sm:text-sm font-sans bg-white">
+                  <thead>
+                    <tr
+                      style={{ backgroundColor: '#599E39', color: '#ffffff' }}
+                      className="font-bold text-center border-b border-[#477e2e]"
+                    >
+                      <th className="border border-[#4c8730] py-2.5 px-3 w-14 text-center font-bold text-white whitespace-nowrap">
+                        Sr No
+                      </th>
+                      <th className="border border-[#4c8730] py-2.5 px-4 text-left font-bold text-white">
+                        देणगीदार नाव
+                      </th>
+                      <th className="border border-[#4c8730] py-2.5 px-3 text-right w-28 font-bold text-white whitespace-nowrap">
+                        देणगी रक्कम
+                      </th>
+                      <th className="border border-[#4c8730] py-2.5 px-3 text-right w-24 font-bold text-white whitespace-nowrap">
+                        जमा
+                      </th>
+                      <th className="border border-[#4c8730] py-2.5 px-3 text-right w-24 font-bold text-white whitespace-nowrap">
+                        येणे
+                      </th>
+                      <th className="border border-[#4c8730] py-2.5 px-3 text-center w-24 font-bold text-white whitespace-nowrap">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bookDonorsList.map((donor, idx) => {
+                      const promised = Number(donor.promisedAmount || donor.totalPaid || 0);
+                      const paid = Number(donor.totalPaid || 0);
+                      const remaining = Math.max(0, promised - paid);
+
+                      const isFullyPaid = remaining === 0 && paid > 0;
+                      const isPartial = paid > 0 && remaining > 0;
+                      const isPending = paid === 0;
+
+                      return (
+                        <tr
+                          key={donor._id || idx}
+                          className="hover:bg-emerald-50/50 transition border-b border-zinc-200 even:bg-[#fafbfa]"
+                        >
+                          {/* Col 1: Sr No */}
+                          <td className="border border-zinc-300 py-2 px-3 text-center font-semibold text-zinc-700">
+                            {idx + 1}
+                          </td>
+
+                          {/* Col 2: देणगीदार नाव */}
+                          <td className="border border-zinc-300 py-2 px-4 text-left text-zinc-900">
+                            <div className="font-bold flex items-center gap-1.5 flex-wrap">
+                              <span>{donor.name}</span>
+                              {donor.businessName && (
+                                <span className="text-[11px] text-zinc-500 font-normal">
+                                  ({donor.businessName})
+                                </span>
+                              )}
+                              {selectedBook === 'all' && donor.bookNo && (
+                                <span className="px-1.5 py-0.2 rounded text-[10px] bg-zinc-100 text-zinc-600 font-mono border border-zinc-300">
+                                  बूक {donor.bookNo}
+                                </span>
+                              )}
+                            </div>
+                            {donor.mobile && (
+                              <div className="text-[11px] text-zinc-500 print:hidden flex items-center gap-1 mt-0.5">
+                                <span>मो: {donor.mobile}</span>
+                                {donor.area && <span>• {donor.area}</span>}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Col 3: देणगी रक्कम */}
+                          <td className="border border-zinc-300 py-2 px-3 text-right font-mono font-bold text-zinc-800 whitespace-nowrap">
+                            ₹{promised.toLocaleString('en-IN')}
+                          </td>
+
+                          {/* Col 4: जमा */}
+                          <td className="border border-zinc-300 py-2 px-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap">
+                            ₹{paid.toLocaleString('en-IN')}
+                          </td>
+
+                          {/* Col 5: येणे */}
+                          <td className={`border border-zinc-300 py-2 px-3 text-right font-mono font-bold whitespace-nowrap ${
+                            remaining > 0 ? 'text-amber-700 font-black' : 'text-zinc-500'
+                          }`}>
+                            ₹{remaining.toLocaleString('en-IN')}
+                          </td>
+
+                          {/* Col 6: Status */}
+                          <td className="border border-zinc-300 py-2 px-3 text-center whitespace-nowrap">
+                            {isFullyPaid && (
+                              <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-bold bg-[#E8F5E9] text-[#2E7D32] border border-[#A5D6A7]">
+                                जमा
+                              </span>
+                            )}
+                            {isPartial && (
+                              <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-bold bg-[#FFF8E1] text-[#F57F17] border border-[#FFE082]">
+                                अपूर्ण
+                              </span>
+                            )}
+                            {isPending && (
+                              <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-bold bg-[#FFEBEE] text-[#C62828] border border-[#FFCDD2]">
+                                बाकी
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    {/* Summary / Total Row matching user requirements */}
+                    <tr className="bg-[#EDF7ED] font-black border-t-2 border-[#599E39] text-zinc-950">
+                      <td className="border border-zinc-300 py-2.5 px-3 text-center font-bold">
+                        एकूण
+                      </td>
+                      <td className="border border-zinc-300 py-2.5 px-4 font-black">
+                        एकूण ({bookDonorsList.length} देणगीदार)
+                      </td>
+                      <td className="border border-zinc-300 py-2.5 px-3 text-right font-black text-zinc-950 font-mono whitespace-nowrap">
+                        ₹{bookReportTotals.promised.toLocaleString('en-IN')}
+                      </td>
+                      <td className="border border-zinc-300 py-2.5 px-3 text-right font-black text-emerald-800 font-mono whitespace-nowrap">
+                        ₹{bookReportTotals.paid.toLocaleString('en-IN')}
+                      </td>
+                      <td className="border border-zinc-300 py-2.5 px-3 text-right font-black text-amber-800 font-mono whitespace-nowrap">
+                        ₹{bookReportTotals.remaining.toLocaleString('en-IN')}
+                      </td>
+                      <td className="border border-zinc-300 py-2.5 px-3 text-center font-bold text-xs text-emerald-800 whitespace-nowrap">
+                        {bookReportTotals.percent}% वसूल
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+
+            {/* Print Footer Notice */}
+            <div className="mt-4 pt-3 border-t border-zinc-200 flex items-center justify-between text-[11px] text-zinc-500 font-sans">
+              <div>
+                मंडळ: <strong>{activeFestival?.mandalNameMarathi || 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ, सोलापूर'}</strong>
+              </div>
+              <div>
+                दिनांक: <strong>{new Date().toLocaleDateString('mr-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</strong>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
