@@ -7,14 +7,18 @@ const XLSX = XLSXStyle.default || XLSXStyle;
  * Export Book-Wise Report to native .xlsx format matching the user's exact specifications:
  * - A4 Paper Size (paperSize: 9)
  * - Horizontal Center on page printing (<printOptions horizontalCentered="1"/>)
+ * - Festival Year beside Book Number at top: e.g. "बूक न. 1 (2026) वर्गणी"
+ * - Sr No column added as Col A
  * - Header Row (Row 4): Height = 26
+ *   - 'Sr No': Column Width = 8.00, Header Height = 26
  *   - 'देणगीदार नाव': Column Width = 29.33, Header Height = 26
  *   - 'देणगी रक्कम': Column Width = 11.56, Header Height = 26
  *   - 'जमा': Column Width = 11.30, Header Height = 26
  *   - 'येणे': Column Width = 11.30, Header Height = 26
  *   - 'Status': Column Width = 13.00, Header Height = 26
  * - Actual Data Rows: Height = 27
- * - Summary & Signatures Blocks styled and formatted cleanly
+ * - Summary Block styled and formatted cleanly
+ * - e-Signature section completely removed as requested
  */
 export const exportBookWiseExcel = ({
   mandalName = 'ज्योती नवरात्र बहुउद्देशीय तरुण मंडळ',
@@ -30,21 +34,22 @@ export const exportBookWiseExcel = ({
       ? `बूक न. ${numericBook}`
       : `बूक ${bookNo}`;
   const title1 = mandalName;
-  const title2 = `${cleanBookLabel} वर्गणी`;
+  // Year of festival placed beside book number at top
+  const title2 = `${cleanBookLabel} (${festivalYear}) वर्गणी`;
 
-  // Build rows array (5 columns: देणगीदार नाव, देणगी रक्कम, जमा, येणे, Status)
+  // Build rows array (6 columns: Sr No, देणगीदार नाव, देणगी रक्कम, जमा, येणे, Status)
   const rows = [
-    [title1, '', '', '', ''], // Row 1 (index 0) - Title 1
-    [title2, '', '', '', ''], // Row 2 (index 1) - Title 2
-    ['', '', '', '', ''],     // Row 3 (index 2) - Blank Spacing
-    ['देणगीदार नाव', 'देणगी रक्कम', 'जमा', 'येणे', 'Status'], // Row 4 (index 3) - Header
+    [title1, '', '', '', '', ''], // Row 1 (index 0) - Title 1
+    [title2, '', '', '', '', ''], // Row 2 (index 1) - Title 2
+    ['', '', '', '', '', ''],     // Row 3 (index 2) - Blank Spacing
+    ['Sr No', 'देणगीदार नाव', 'देणगी रक्कम', 'जमा', 'येणे', 'Status'], // Row 4 (index 3) - Header
   ];
 
   let totalPromised = 0;
   let totalPaid = 0;
   let totalRemaining = 0;
 
-  donors.forEach((d) => {
+  donors.forEach((d, idx) => {
     const promised = Number(d.promisedAmount || d.totalPaid || 0);
     const paid = Number(d.totalPaid || 0);
     const remaining = Math.max(0, promised - paid);
@@ -63,6 +68,7 @@ export const exportBookWiseExcel = ({
     const donorName = d.businessName ? `${d.name} (${d.businessName})` : d.name;
 
     rows.push([
+      idx + 1,
       donorName || '',
       promised,
       paid,
@@ -74,53 +80,30 @@ export const exportBookWiseExcel = ({
   // Summary row
   const summaryRowIndex = rows.length;
   rows.push([
-    `एकूण (${donors.length} देणगीदार)`,
+    'एकूण',
+    `(${donors.length} देणगीदार)`,
     totalPromised,
     totalPaid,
     totalRemaining,
     totalPromised > 0 ? `${Math.round((totalPaid / totalPromised) * 100)}% जमा` : '१००% जमा',
   ]);
 
-  // Blank spacing rows before signatures
-  rows.push(['', '', '', '', '']);
-  rows.push(['', '', '', '', '']);
-
-  // e-Signature Block (5 columns: A:B for खजिनदार, C:D for कार्यवाह, E for अध्यक्ष)
-  const signRow1Index = rows.length;
-  rows.push([
-    'श्री. गुरुराज (खजिनदार)', '',
-    'कार्यवाह / सेक्रेटरी', '',
-    'अध्यक्ष',
-  ]);
-
-  const signRow2Index = rows.length;
-  rows.push([
-    'खजिनदार सही (e-Sign)', '',
-    'कार्यवाह सही (e-Sign)', '',
-    'अध्यक्ष सही (e-Sign)',
-  ]);
-
-  const signRow3Index = rows.length;
-  rows.push([
-    '✓ ई-स्वाक्षरी प्रमाणित', '',
-    '✓ ई-स्वाक्षरी प्रमाणित', '',
-    '✓ ई-स्वाक्षरी प्रमाणित',
-  ]);
-
   const ws = XLSX.utils.aoa_to_sheet(rows);
 
   // Exact column widths as requested:
+  // - Sr No: 8.00
   // - देणगीदार नाव: 29.33
   // - देणगी रक्कम: 11.56
   // - जमा: 11.30
   // - येणे: 11.30
   // - Status: 13.00
   ws['!cols'] = [
-    { wch: 29.33, width: 29.33 }, // Col A: देणगीदार नाव
-    { wch: 11.56, width: 11.56 }, // Col B: देणगी रक्कम
-    { wch: 11.30, width: 11.30 }, // Col C: जमा
-    { wch: 11.30, width: 11.30 }, // Col D: येणे
-    { wch: 13.00, width: 13.00 }, // Col E: Status
+    { wch: 8.00, width: 8.00 },   // Col A: Sr No
+    { wch: 29.33, width: 29.33 }, // Col B: देणगीदार नाव
+    { wch: 11.56, width: 11.56 }, // Col C: देणगी रक्कम
+    { wch: 11.30, width: 11.30 }, // Col D: जमा
+    { wch: 11.30, width: 11.30 }, // Col E: येणे
+    { wch: 13.00, width: 13.00 }, // Col F: Status
   ];
 
   // Exact row heights as requested:
@@ -130,7 +113,7 @@ export const exportBookWiseExcel = ({
     { hpt: 28 }, // Row 1: Title 1
     { hpt: 24 }, // Row 2: Title 2
     { hpt: 10 }, // Row 3: Blank spacing
-    { hpt: 26 }, // Row 4: Header row (देणगीदार नाव, देणगी रक्कम, जमा, येणे, Status) - EXACT 26
+    { hpt: 26 }, // Row 4: Header row (Sr No, देणगीदार नाव, देणगी रक्कम, जमा, येणे, Status) - EXACT 26
   ];
 
   // Actual data rows: EXACT 27 height each
@@ -138,33 +121,15 @@ export const exportBookWiseExcel = ({
     rowHeights.push({ hpt: 27 });
   });
 
-  // Summary row
+  // Summary row: EXACT 27 height
   rowHeights.push({ hpt: 27 });
-
-  // Blank spacing rows
-  rowHeights.push({ hpt: 12 });
-  rowHeights.push({ hpt: 12 });
-
-  // Signatures rows
-  rowHeights.push({ hpt: 24 });
-  rowHeights.push({ hpt: 20 });
-  rowHeights.push({ hpt: 20 });
 
   ws['!rows'] = rowHeights;
 
-  // Merged ranges (5 columns: A to E)
+  // Merged ranges (6 columns: A to F)
   ws['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }, // Title 1 (A1:E1)
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } }, // Title 2 (A2:E2)
-    // Signatures merges
-    { s: { r: signRow1Index, c: 0 }, e: { r: signRow1Index, c: 1 } },
-    { s: { r: signRow1Index, c: 2 }, e: { r: signRow1Index, c: 3 } },
-
-    { s: { r: signRow2Index, c: 0 }, e: { r: signRow2Index, c: 1 } },
-    { s: { r: signRow2Index, c: 2 }, e: { r: signRow2Index, c: 3 } },
-
-    { s: { r: signRow3Index, c: 0 }, e: { r: signRow3Index, c: 1 } },
-    { s: { r: signRow3Index, c: 2 }, e: { r: signRow3Index, c: 3 } },
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }, // Title 1 (A1:F1)
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } }, // Title 2 (A2:F2)
   ];
 
   // A4 Page Setup & Margins & Horizontal Print Centering
@@ -190,9 +155,9 @@ export const exportBookWiseExcel = ({
   };
 
   // 🎨 APPLY EXACT COLOR, FONT SIZE & TEXT ALIGNMENT STYLES
-  const colNames = ['A', 'B', 'C', 'D', 'E'];
+  const colNames = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-  // 1. Title 1 Style (Merged A1:E1 - Bold, Centered)
+  // 1. Title 1 Style (Merged A1:F1 - Bold, Centered)
   if (ws['A1']) {
     ws['A1'].s = {
       font: { name: 'Arial', sz: 16, bold: true, color: { rgb: '111827' } },
@@ -200,7 +165,7 @@ export const exportBookWiseExcel = ({
     };
   }
 
-  // 2. Title 2 Style (Merged A2:E2 - Bold, Centered)
+  // 2. Title 2 Style (Merged A2:F2 - Bold, Centered)
   if (ws['A2']) {
     ws['A2'].s = {
       font: { name: 'Arial', sz: 13, bold: true, color: { rgb: '1F2937' } },
@@ -208,7 +173,7 @@ export const exportBookWiseExcel = ({
     };
   }
 
-  // 3. Table Header Style (Row 4: A4..E4) - Green #599E39 & White Bold, Centered
+  // 3. Table Header Style (Row 4: A4..F4) - Green #599E39 & White Bold, Centered
   colNames.forEach((col) => {
     const cellRef = `${col}4`;
     if (ws[cellRef]) {
@@ -243,20 +208,30 @@ export const exportBookWiseExcel = ({
     const isFullyPaid = remaining === 0 && paid > 0;
     const isPartial = paid > 0 && remaining > 0;
 
-    // Col A: देणगीदार नाव (Left-aligned, Bold 10pt)
+    // Col A: Sr No (Centered)
     const cellA = `A${rowNum}`;
     if (ws[cellA]) {
       ws[cellA].s = {
+        font: { name: 'Arial', sz: 10, color: { rgb: '374151' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: thinBorder,
+      };
+    }
+
+    // Col B: देणगीदार नाव (Left-aligned, Bold 10.5pt)
+    const cellB = `B${rowNum}`;
+    if (ws[cellB]) {
+      ws[cellB].s = {
         font: { name: 'Arial', sz: 10.5, bold: true, color: { rgb: '111827' } },
         alignment: { horizontal: 'left', vertical: 'center' },
         border: thinBorder,
       };
     }
 
-    // Col B: देणगी रक्कम (Right-aligned, Bold)
-    const cellB = `B${rowNum}`;
-    if (ws[cellB]) {
-      ws[cellB].s = {
+    // Col C: देणगी रक्कम (Right-aligned, Bold)
+    const cellC = `C${rowNum}`;
+    if (ws[cellC]) {
+      ws[cellC].s = {
         font: { name: 'Arial', sz: 10.5, bold: true, color: { rgb: '1F2937' } },
         alignment: { horizontal: 'right', vertical: 'center' },
         border: thinBorder,
@@ -264,10 +239,10 @@ export const exportBookWiseExcel = ({
       };
     }
 
-    // Col C: जमा (Right-aligned, Bold Green #15803D)
-    const cellC = `C${rowNum}`;
-    if (ws[cellC]) {
-      ws[cellC].s = {
+    // Col D: जमा (Right-aligned, Bold Green #15803D)
+    const cellD = `D${rowNum}`;
+    if (ws[cellD]) {
+      ws[cellD].s = {
         font: { name: 'Arial', sz: 10.5, bold: true, color: { rgb: '15803D' } },
         alignment: { horizontal: 'right', vertical: 'center' },
         border: thinBorder,
@@ -275,10 +250,10 @@ export const exportBookWiseExcel = ({
       };
     }
 
-    // Col D: येणे (Right-aligned, Bold Amber #B45309 if > 0)
-    const cellD = `D${rowNum}`;
-    if (ws[cellD]) {
-      ws[cellD].s = {
+    // Col E: येणे (Right-aligned, Bold Amber #B45309 if > 0)
+    const cellE = `E${rowNum}`;
+    if (ws[cellE]) {
+      ws[cellE].s = {
         font: { name: 'Arial', sz: 10.5, bold: true, color: { rgb: remaining > 0 ? 'B45309' : '6B7280' } },
         alignment: { horizontal: 'right', vertical: 'center' },
         border: thinBorder,
@@ -286,9 +261,9 @@ export const exportBookWiseExcel = ({
       };
     }
 
-    // Col E: Status (Centered with soft badge color fill)
-    const cellE = `E${rowNum}`;
-    if (ws[cellE]) {
+    // Col F: Status (Centered with soft badge color fill)
+    const cellF = `F${rowNum}`;
+    if (ws[cellF]) {
       let statusBg = 'FEF2F2'; // soft red for बाकी
       let statusColor = 'B91C1C';
       if (isFullyPaid) {
@@ -299,7 +274,7 @@ export const exportBookWiseExcel = ({
         statusColor = 'B45309';
       }
 
-      ws[cellE].s = {
+      ws[cellF].s = {
         fill: { fgColor: { rgb: statusBg } },
         font: { name: 'Arial', sz: 10, bold: true, color: { rgb: statusColor } },
         alignment: { horizontal: 'center', vertical: 'center' },
@@ -326,15 +301,18 @@ export const exportBookWiseExcel = ({
         fontColor = '111827';
         align = 'center';
       } else if (col === 'B') {
+        fontColor = '111827';
+        align = 'center';
+      } else if (col === 'C') {
         fontColor = '1F2937';
         align = 'right';
-      } else if (col === 'C') {
+      } else if (col === 'D') {
         fontColor = '15803D';
         align = 'right';
-      } else if (col === 'D') {
+      } else if (col === 'E') {
         fontColor = 'B45309';
         align = 'right';
-      } else if (col === 'E') {
+      } else if (col === 'F') {
         fontColor = '15803D';
         align = 'center';
       }
@@ -344,42 +322,7 @@ export const exportBookWiseExcel = ({
         font: { name: 'Arial', sz: 11, bold: true, color: { rgb: fontColor } },
         alignment: { horizontal: align, vertical: 'center' },
         border: totalBorders,
-        numFmt: (col === 'B' || col === 'C' || col === 'D') ? '#,##0' : undefined,
-      };
-    }
-  });
-
-  // 6. Signatures Section Styles (e-Sign)
-  const signRow1Num = signRow1Index + 1;
-  const signRow2Num = signRow2Index + 1;
-  const signRow3Num = signRow3Index + 1;
-
-  ['A', 'C', 'E'].forEach((col) => {
-    // Row 1: Designation / Name (Bold, 11pt, Centered)
-    const ref1 = `${col}${signRow1Num}`;
-    if (ws[ref1]) {
-      ws[ref1].s = {
-        font: { name: 'Arial', sz: 11, bold: true, color: { rgb: '111827' } },
-        alignment: { horizontal: 'center', vertical: 'center' },
-        border: { top: { style: 'thin', color: { rgb: '9CA3AF' } } },
-      };
-    }
-
-    // Row 2: Subtitle (10pt, Centered, Gray)
-    const ref2 = `${col}${signRow2Num}`;
-    if (ws[ref2]) {
-      ws[ref2].s = {
-        font: { name: 'Arial', sz: 9.5, italic: true, color: { rgb: '6B7280' } },
-        alignment: { horizontal: 'center', vertical: 'center' },
-      };
-    }
-
-    // Row 3: e-Sign Verified Badge (Green, Bold, Centered)
-    const ref3 = `${col}${signRow3Num}`;
-    if (ws[ref3]) {
-      ws[ref3].s = {
-        font: { name: 'Arial', sz: 9, bold: true, color: { rgb: '15803D' } },
-        alignment: { horizontal: 'center', vertical: 'center' },
+        numFmt: (col === 'C' || col === 'D' || col === 'E') ? '#,##0' : undefined,
       };
     }
   });
@@ -451,20 +394,20 @@ export const exportBookWiseCSV = ({
       ? `बूक न. ${numericBook}`
       : `बूक ${bookNo}`;
   const title1 = mandalName;
-  const title2 = `${cleanBookLabel} वर्गणी`;
+  const title2 = `${cleanBookLabel} (${festivalYear}) वर्गणी`;
 
   const lines = [
     `"${title1.replace(/"/g, '""')}"`,
     `"${title2.replace(/"/g, '""')}"`,
     '',
-    'देणगीदार नाव,देणगी रक्कम,जमा,येणे,Status',
+    'Sr No,देणगीदार नाव,देणगी रक्कम,जमा,येणे,Status',
   ];
 
   let totalPromised = 0;
   let totalPaid = 0;
   let totalRemaining = 0;
 
-  donors.forEach((d) => {
+  donors.forEach((d, index) => {
     const promised = Number(d.promisedAmount || d.totalPaid || 0);
     const paid = Number(d.totalPaid || 0);
     const remaining = Math.max(0, promised - paid);
@@ -484,6 +427,7 @@ export const exportBookWiseCSV = ({
 
     lines.push(
       [
+        index + 1,
         `"${(donorName || '').replace(/"/g, '""')}"`,
         promised,
         paid,
@@ -496,19 +440,14 @@ export const exportBookWiseCSV = ({
   // Summary row
   lines.push(
     [
-      `"एकूण (${donors.length} देणगीदार)"`,
+      '"एकूण"',
+      `"(${donors.length} देणगीदार)"`,
       totalPromised,
       totalPaid,
       totalRemaining,
       `"${totalPromised > 0 ? Math.round((totalPaid / totalPromised) * 100) : 100}% जमा"`,
     ].join(',')
   );
-
-  // Spacing and e-Signatures in CSV
-  lines.push('');
-  lines.push('"श्री. गुरुराज (खजिनदार)","","कार्यवाह / सेक्रेटरी","","अध्यक्ष"');
-  lines.push('"खजिनदार सही (e-Sign)","","कार्यवाह सही (e-Sign)","","अध्यक्ष सही (e-Sign)"');
-  lines.push('"✓ ई-स्वाक्षरी प्रमाणित","","✓ ई-स्वाक्षरी प्रमाणित","","✓ ई-स्वाक्षरी प्रमाणित"');
 
   const csvContent = '\uFEFF' + lines.join('\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
