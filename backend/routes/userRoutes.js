@@ -152,23 +152,9 @@ router.post('/karyakarta', protect, adminOnly, async (req, res) => {
 });
 
 // GET /api/users/me (Get current logged-in user profile)
-router.get('/me', async (req, res) => {
+router.get('/me', protect, async (req, res) => {
   try {
-    let token;
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(
-        token,
-        process.env.JWT_SECRET || 'jyoti_navratra_solapur_secret_key_2026_mandal'
-      );
-      const user = await User.findById(decoded.id).select('-password');
-      if (user) return res.json(user);
-    }
-
-    // Default to admin
-    await ensureDefaultAdmin();
-    const defaultAdmin = await User.findOne({ role: 'Admin' }).select('-password');
-    res.json(defaultAdmin);
+    res.json(req.user);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

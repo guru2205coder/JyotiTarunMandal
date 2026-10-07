@@ -36,6 +36,7 @@ router.get('/', async (req, res) => {
       const searchRegex = new RegExp(q.trim(), 'i');
       filter.$or = [
         { name: searchRegex },
+        { businessName: searchRegex },
         { mobile: searchRegex },
         { area: searchRegex },
         { bookNo: searchRegex },

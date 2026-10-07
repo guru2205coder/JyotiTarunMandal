@@ -15,6 +15,22 @@ const getHeaders = (customHeaders = {}) => {
 const cache = new Map();
 const CACHE_TTL_MS = 30000;
 
+const handleResponse = async (res, url) => {
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText }));
+    if (res.status === 401 && !url.includes('/users/login')) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: err }));
+      }
+    }
+    const errorObj = new Error(err.message || 'Request failed');
+    errorObj.status = res.status;
+    errorObj.data = err;
+    throw errorObj;
+  }
+  return res.json();
+};
+
 export const api = {
   clearCache(prefix = '') {
     if (!prefix) {
@@ -43,12 +59,10 @@ export const api = {
     const res = await fetch(`${API_BASE}${url}`, {
       headers: getHeaders(),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: res.statusText }));
-      throw new Error(err.message || 'Request failed');
+    const data = await handleResponse(res, url);
+    if (!bypassCache) {
+      cache.set(url, { timestamp: now, data });
     }
-    const data = await res.json();
-    cache.set(url, { timestamp: now, data });
     return data;
   },
 
@@ -59,13 +73,7 @@ export const api = {
       headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(data),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: res.statusText }));
-      const errorObj = new Error(err.message || 'Request failed');
-      errorObj.data = err;
-      throw errorObj;
-    }
-    return res.json();
+    return handleResponse(res, url);
   },
 
   async put(url, data) {
@@ -75,11 +83,7 @@ export const api = {
       headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(data),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: res.statusText }));
-      throw new Error(err.message || 'Request failed');
-    }
-    return res.json();
+    return handleResponse(res, url);
   },
 
   async delete(url) {
@@ -88,10 +92,6 @@ export const api = {
       method: 'DELETE',
       headers: getHeaders(),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: res.statusText }));
-      throw new Error(err.message || 'Request failed');
-    }
-    return res.json();
+    return handleResponse(res, url);
   },
 };

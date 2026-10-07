@@ -86,8 +86,32 @@ export const AppProvider = ({ children }) => {
     localStorage.removeItem('vargani_user');
     setToken(null);
     setUser(null);
+    api.clearCache();
     showToast(language === 'mr' ? 'सुरक्षित लॉगआउट झाले' : 'Logged out successfully');
   };
+
+  // Handle unauthorized (401) events when user is deleted or token expired
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      const hadToken = !!localStorage.getItem('vargani_token');
+      localStorage.removeItem('vargani_token');
+      localStorage.removeItem('vargani_user');
+      setToken(null);
+      setUser(null);
+      api.clearCache();
+      if (hadToken) {
+        showToast(
+          language === 'mr'
+            ? 'खाते अस्तित्वात नाही किंवा सत्र संपले आहे (Session ended or user deleted)'
+            : 'Session expired or user account was deleted',
+          'error'
+        );
+      }
+    };
+
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
+  }, [language]);
 
   const loadFestivals = async () => {
     try {
@@ -138,16 +162,28 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     const curToken = localStorage.getItem('vargani_token');
     if (curToken) {
-      api.get('/users/me')
+      api.get('/users/me', { bypassCache: true })
         .then((profile) => {
           if (profile) {
-            setUser((prev) => ({ ...(prev || {}), ...profile }));
+            setUser((prev) => {
+              const updated = { ...(prev || {}), ...profile };
+              try {
+                localStorage.setItem('vargani_user', JSON.stringify(updated));
+              } catch (e) {
+                console.error('Failed saving user to localStorage:', e);
+              }
+              return updated;
+            });
             refreshAll();
           }
         })
         .catch(() => {
-          // Token expired or invalid
-          logout();
+          // Token expired, invalid, or user was deleted
+          localStorage.removeItem('vargani_token');
+          localStorage.removeItem('vargani_user');
+          setToken(null);
+          setUser(null);
+          api.clearCache();
           setLoading(false);
         });
     } else {

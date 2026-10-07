@@ -1,5 +1,5 @@
 // Verification script for the required test steps
-const API = 'http://localhost:5000/api';
+const API = 'http://127.0.0.1:5000/api';
 
 async function runTest() {
   console.log('--- STARTING VERIFICATION WORKFLOW ---');
@@ -14,10 +14,27 @@ async function runTest() {
     }
   } catch (err) {}
 
+  // Authenticate as Admin
+  let authHeaders = { 'Content-Type': 'application/json' };
+  try {
+    const loginRes = await fetch(`${API}/users/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: '9175344556', password: '220503@Gk' }),
+    });
+    if (loginRes.ok) {
+      const auth = await loginRes.json();
+      authHeaders = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${auth.token}`,
+      };
+    }
+  } catch (e) {}
+
   console.log('Creating fresh isolated festival for verification workflow...');
   const testFestRes = await fetch(`${API}/festivals`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders,
     body: JSON.stringify({
       name: `चाचणी उत्सव (Verification Workflow Test)`,
       year: 2026,
@@ -28,12 +45,13 @@ async function runTest() {
   const fest = await testFestRes.json();
   console.log(`✓ Active Test Festival: "${fest.name}" (ID: ${fest._id}) with Opening Balance: ₹${fest.openingBalance}`);
 
+  let donor;
   try {
     // Step 1 & 2: Add donor named Siddheshwar Traders with promised Vargani ₹2,100
     console.log('\n[Step 1 & 2]: Adding donor "Siddheshwar Traders" with promise ₹2,100...');
     const donorRes = await fetch(`${API}/donors`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({
         festivalId: fest._id,
         name: 'सिद्धेश्वर ट्रेडर्स (Siddheshwar Traders)',
@@ -52,7 +70,7 @@ async function runTest() {
     console.log('\n[Step 3 & 4]: Recording ₹1,500 as first installment...');
     const pay1Res = await fetch(`${API}/payments`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({
         festivalId: fest._id,
         donorId: donor._id,
@@ -69,7 +87,7 @@ async function runTest() {
     console.log('\n[Step 5 & 6]: Recording ₹500 as second installment...');
     const pay2Res = await fetch(`${API}/payments`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({
         festivalId: fest._id,
         donorId: donor._id,
@@ -87,7 +105,7 @@ async function runTest() {
     console.log('\n[Step 7 & 8]: Recording ₹100 as third installment...');
     const pay3Res = await fetch(`${API}/payments`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({
         festivalId: fest._id,
         donorId: donor._id,
@@ -126,7 +144,7 @@ async function runTest() {
     console.log('\n[Step 11]: Adding an expense of ₹600...');
     const expRes = await fetch(`${API}/expenses`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({
         festivalId: fest._id,
         title: 'मंडप डेकोरेशन व आरती',
@@ -181,14 +199,20 @@ async function runTest() {
     console.log('\n🎉 ALL 12 WORKFLOW REQUIREMENTS SUCCESSFULLY VERIFIED! 🎉');
   } finally {
     // Restore original festival and clean up test festival
-    if (fest && fest._id) {
+    if (fest && fest._id && donor?._id) {
       try {
-        await fetch(`${API}/donors/${donor._id}`, { method: 'DELETE' }).catch(() => {});
+        await fetch(`${API}/donors/${donor._id}`, {
+          method: 'DELETE',
+          headers: authHeaders.Authorization ? { Authorization: authHeaders.Authorization } : {},
+        }).catch(() => {});
       } catch (e) {}
     }
     if (origFest && origFest._id && origFest._id !== fest?._id) {
       console.log(`\nRestoring original festival: ${origFest.name}...`);
-      await fetch(`${API}/festivals/${origFest._id}/set-active`, { method: 'PUT' });
+      await fetch(`${API}/festivals/${origFest._id}/set-active`, {
+        method: 'PUT',
+        headers: authHeaders.Authorization ? { Authorization: authHeaders.Authorization } : {},
+      });
       console.log('✓ Original festival active state restored.');
     }
   }
